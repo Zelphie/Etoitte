@@ -45,6 +45,36 @@ async function handleStorage(request, env) {
   return json({ error: "method not allowed" }, 405);
 }
 
+// Area config (labels/centroids/walkable radius) lives under its own KV key so it can be
+// edited directly in KV (e.g. `wrangler kv key put`) without a redeploy. GET returns null
+// when unset — the frontend seeds it with its built-in defaults on first load.
+async function handleAreas(request, env) {
+  if (request.method === "GET") {
+    const raw = await env.ETOITTE_KV.get("config:areas");
+    if (!raw) return json(null);
+    try {
+      return json(JSON.parse(raw));
+    } catch (e) {
+      return json(null);
+    }
+  }
+  if (request.method === "PUT" || request.method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      return json({ error: "invalid json" }, 400);
+    }
+    if (!body.labels || typeof body.labels !== "object" || !body.centroids || typeof body.centroids !== "object" ||
+        !body.regions || typeof body.regions !== "object") {
+      return json({ error: "labels, centroids, and regions objects required" }, 400);
+    }
+    await env.ETOITTE_KV.put("config:areas", JSON.stringify(body));
+    return json({ ok: true });
+  }
+  return json({ error: "method not allowed" }, 405);
+}
+
 async function handleAnthropic(request, env) {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
 
@@ -104,6 +134,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === "/api/storage") return handleStorage(request, env);
+    if (url.pathname === "/api/areas") return handleAreas(request, env);
     if (url.pathname === "/api/anthropic") return handleAnthropic(request, env);
     return env.ASSETS.fetch(request);
   },
