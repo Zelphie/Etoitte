@@ -728,6 +728,28 @@ If you can't find enough genuine real matches, return fewer items rather than in
     mainArea.innerHTML = `<div class="status-block"><p>No round going yet.</p><div class="sub">Set your filters, then tap "Shuffle a new round" to start swiping.</div></div>`;
   }
 
+  function clearRoundControlHtml(){
+    return `<div style="text-align:center;margin-top:16px;">
+      <button id="btnClearRound" style="background:none;border:none;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;text-decoration:underline;cursor:pointer;padding:4px;">Clear this round</button>
+    </div>`;
+  }
+  function wireClearRoundControl(){
+    const b = document.getElementById('btnClearRound');
+    if(b) b.onclick = clearRound;
+  }
+  async function clearRound(){
+    if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+    if(round){
+      await safeDelete('votes:'+round.id+':a', true);
+      await safeDelete('votes:'+round.id+':b', true);
+      await safeDelete('current_round', true);
+    }
+    round = null;
+    myVotes = {};
+    deckIndex = 0;
+    renderNoRound();
+  }
+
   function renderRound(){
     if(deckIndex >= round.deck.length){
       renderWaitingOrMatches();
@@ -760,6 +782,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
         <button class="no" id="btnNo">✕</button>
         <button class="yes" id="btnYes">✓</button>
       </div>
+      ${clearRoundControlHtml()}
     `;
     document.getElementById('btnNo').onclick = ()=>vote(restaurantId, false);
     document.getElementById('btnYes').onclick = ()=>vote(restaurantId, true);
@@ -773,6 +796,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
       };
     }
     wireDrag(restaurantId);
+    wireClearRoundControl();
   }
 
 
@@ -819,7 +843,8 @@ If you can't find enough genuine real matches, return fewer items rather than in
     const otherVotes = (await safeGet('votes:'+round.id+':'+otherKey, true)) || {};
     const otherDone = round.deck.filter(id=>id in otherVotes).length >= round.deck.length;
     if(!otherDone){
-      mainArea.innerHTML = `<div class="status-block"><div class="spinner"></div><p>Waiting on ${names[otherKey]}...</p><div class="sub">Checking back every few seconds.</div></div>`;
+      mainArea.innerHTML = `<div class="status-block"><div class="spinner"></div><p>Waiting on ${names[otherKey]}...</p><div class="sub">Checking back every few seconds.</div></div>${clearRoundControlHtml()}`;
+      wireClearRoundControl();
       if(!pollTimer){
         pollTimer = setInterval(async ()=>{
           const ov = (await safeGet('votes:'+round.id+':'+otherKey, true)) || {};
@@ -833,7 +858,8 @@ If you can't find enough genuine real matches, return fewer items rather than in
     const matchIds = round.deck.filter(id => myVotes[id]===true && otherVotes[id]===true);
     const uniqueMatches = [...new Set(matchIds)];
     if(uniqueMatches.length===0){
-      mainArea.innerHTML = `<div class="status-block"><p>No overlap this round 😅</p><div class="sub">Try widening a filter, or just shuffle again — the wildcard might land better next time.</div></div>`;
+      mainArea.innerHTML = `<div class="status-block"><p>No overlap this round 😅</p><div class="sub">Try widening a filter, or just shuffle again — the wildcard might land better next time.</div></div>${clearRoundControlHtml()}`;
+      wireClearRoundControl();
       return;
     }
     const pickId = uniqueMatches[Math.floor(Math.random()*uniqueMatches.length)];
@@ -855,6 +881,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
     if(matchIds.length>1){
       html += `<button id="reroll" style="width:100%;padding:11px;border-radius:9px;border:none;background:var(--butter);color:var(--ink);font-weight:700;cursor:pointer;margin-top:4px;">Re-roll among matches</button>`;
     }
+    html += clearRoundControlHtml();
     mainArea.innerHTML = html;
     if(matchIds.length>1){
       document.getElementById('reroll').onclick = ()=>{
@@ -862,6 +889,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
         renderMatches(matchIds, newPick);
       };
     }
+    wireClearRoundControl();
   }
 
 
