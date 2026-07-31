@@ -181,7 +181,8 @@
   </div>
 
   <div class="panel hidden" id="filterPanel">
-    <h2>What are we in the mood for?</h2>
+    <h2 id="filterPanelHeading">What are you in the mood for?</h2>
+    <div class="small-note" style="margin-bottom:12px;">These are your own filters — your partner sets theirs separately, and each round combines both automatically.</div>
     <div class="field">
       <label>Budget (max)</label>
       <div class="chip-row" id="budgetChips">
@@ -212,11 +213,8 @@
       <label>Cuisine (optional, tap any that work)</label>
       <div class="chip-row" id="cuisineChips"></div>
     </div>
-    <div class="small-note">Filters shape most of the deck — we'll still slip in the occasional wildcard that ignores them, just to keep you both honest.</div>
-    <div class="field" style="margin-top:14px;">
-      <button id="btnConfirmFilters" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--yes);color:var(--paper);font-weight:600;cursor:pointer;">Confirm my filters</button>
-      <div class="small-note" id="filterConfirmStatus" style="margin-top:8px;">Both of you need to confirm before shuffling.</div>
-    </div>
+    <div class="small-note">Your picks combine with your partner's every time you shuffle — no need to agree on the same panel first.</div>
+    <div class="field" id="combinedPreview" style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(0,0,0,0.15);"></div>
   </div>
 
   <div class="panel hidden" id="managePanel">
@@ -312,7 +310,7 @@
   let restaurants = [];    // array
   let round = null;        // {id, filters, deck:[ids], wildcardIds:[ids]}
   let myVotes = {};         // {id: bool}
-  let filters = { budget: 3, areas: [], cuisines: [] };
+  let filters = { budget: 3, areas: [], cuisines: [] }; // whichever person is active (me) — their own, independent filters
   let aiAssistEnabled = false; // shared toggle for Maps autofill + wildcard suggestions (costs API $, off by default)
   let palettes = { a: 'forest', b: 'forest' }; // each person's own colour scheme, applied only while their tab is active
 
@@ -410,9 +408,7 @@
         names = {a,b};
         await safeSet('names', names, true);
         document.getElementById('setupOverlay').classList.add('hidden');
-        renderWho();
-        applyPalette();
-        renderPaletteRow();
+        await init();
       };
       return;
     }
@@ -431,11 +427,42 @@
     round = await safeGet('current_round', true);
     aiAssistEnabled = !!(await safeGet('ai_assist_enabled', true));
     renderAiToggle();
-    filters = (await safeGet('filters', true)) || filters;
-    filters.areas = filters.areas.map(migrateAreaKey);
+    await loadMyFilters();
     renderManagePanel();
     await renderFilterPanel();
     await loadRoundState();
+  }
+
+  async function loadMyFilters(){
+    const stored = await safeGet('filters_'+me, true);
+    filters = stored || { budget: 3, areas: [], cuisines: [] };
+    filters.areas = filters.areas.map(migrateAreaKey);
+  }
+  async function saveMyFilters(){
+    await safeSet('filters_'+me, filters, true);
+  }
+  // Combines two people's independent filters: budget takes the lower (cheaper) cap,
+  // areas/cuisines take the overlap. An empty selection means "no restriction" for that
+  // person, so it never causes a mismatch on its own — mismatch only fires when both
+  // people picked specific, non-overlapping values.
+  function combineFilters(fA, fB){
+    function combineSet(a, b){
+      if(a.length===0 && b.length===0) return { values: [], mismatch: false };
+      if(a.length===0) return { values: b.slice(), mismatch: false };
+      if(b.length===0) return { values: a.slice(), mismatch: false };
+      const setB = new Set(b);
+      const overlap = a.filter(x=>setB.has(x));
+      return { values: overlap, mismatch: overlap.length===0 };
+    }
+    const areaResult = combineSet(fA.areas, fB.areas);
+    const cuisineResult = combineSet(fA.cuisines, fB.cuisines);
+    return {
+      budget: Math.min(fA.budget, fB.budget),
+      areas: areaResult.mismatch ? [] : areaResult.values,
+      cuisines: cuisineResult.mismatch ? [] : cuisineResult.values,
+      areaMismatch: areaResult.mismatch,
+      cuisineMismatch: cuisineResult.mismatch
+    };
   }
 
   function renderAiToggle(){
@@ -455,7 +482,7 @@
       const btn = document.createElement('button');
       btn.textContent = names[key];
       btn.className = me===key ? 'active' : '';
-      btn.onclick = async ()=>{ me = key; renderWho(); applyPalette(); renderPaletteRow(); await loadRoundState(); };
+      btn.onclick = async ()=>{ me = key; renderWho(); applyPalette(); renderPaletteRow(); await loadMyFilters(); await renderFilterPanel(); await loadRoundState(); };
       whoToggle.appendChild(btn);
     });
     if(!me){ me = 'a'; renderWho(); }
@@ -471,17 +498,12 @@
     document.getElementById('filterPanel').classList.add('hidden');
   };
 
-  // Filters are shared (not per-browser): stored under 'filters', and each
-  // person's agreement is stored separately as a signature of the filters
-  // they confirmed, under filters_confirm_a / filters_confirm_b. A round can
-  // only be shuffled once both signatures match the current filters —
-  // any edit invalidates prior confirmations automatically.
-  function filtersSignature(f){
-    return JSON.stringify({ budget: f.budget, areas: [...f.areas].sort(), cuisines: [...f.cuisines].sort() });
-  }
+  // Each person edits their own filters (stored under filters_a / filters_b).
+  // Nothing to confirm or agree on — combineFilters() merges both sides fresh
+  // every time a round is shuffled.
   async function updateFilters(mutator){
     mutator(filters);
-    await safeSet('filters', filters, true);
+    await saveMyFilters();
     await renderFilterPanel();
   }
 
@@ -521,29 +543,40 @@
     });
   }
 
-  async function renderFilterConfirmStatus(){
-    const sig = filtersSignature(filters);
-    const [confirmA, confirmB] = await Promise.all([
-      safeGet('filters_confirm_a', true),
-      safeGet('filters_confirm_b', true)
-    ]);
-    const aOk = confirmA === sig, bOk = confirmB === sig;
-    document.getElementById('filterConfirmStatus').textContent =
-      `${names.a}: ${aOk ? 'confirmed ✓' : 'not yet'} · ${names.b}: ${bOk ? 'confirmed ✓' : 'not yet'}`;
-    return { sig, aOk, bOk };
+  async function loadPartnerFilters(){
+    const otherKey = me==='a' ? 'b' : 'a';
+    const stored = await safeGet('filters_'+otherKey, true);
+    const other = stored || { budget: 3, areas: [], cuisines: [] };
+    other.areas = other.areas.map(migrateAreaKey);
+    return other;
+  }
+
+  async function renderCombinedPreview(){
+    const otherKey = me==='a' ? 'b' : 'a';
+    const other = await loadPartnerFilters();
+    const combined = combineFilters(filters, other);
+    const budgetStr = '$'.repeat(combined.budget);
+    const areaStr = combined.areaMismatch
+      ? `No overlap with ${names[otherKey]} — ignoring area this round and leaning on wildcards`
+      : (combined.areas.length ? combined.areas.map(areaLabel).join(', ') : 'Anywhere');
+    const cuisineStr = combined.cuisineMismatch
+      ? `No overlap with ${names[otherKey]} — ignoring cuisine this round and leaning on wildcards`
+      : (combined.cuisines.length ? combined.cuisines.join(', ') : 'Anything');
+    document.getElementById('combinedPreview').innerHTML = `
+      <div class="small-note" style="color:var(--paper);font-weight:600;margin-bottom:6px;">This round would combine to:</div>
+      <div class="small-note">Budget: up to ${escapeHtml(budgetStr)}</div>
+      <div class="small-note">Areas: ${escapeHtml(areaStr)}</div>
+      <div class="small-note">Cuisine: ${escapeHtml(cuisineStr)}</div>
+    `;
   }
 
   async function renderFilterPanel(){
+    if(names) document.getElementById('filterPanelHeading').textContent = `${names[me]}'s filters`;
     renderBudgetChips();
     renderAreaChips();
     renderCuisineChips();
-    await renderFilterConfirmStatus();
+    await renderCombinedPreview();
   }
-
-  document.getElementById('btnConfirmFilters').onclick = async ()=>{
-    await safeSet('filters_confirm_'+me, filtersSignature(filters), true);
-    await renderFilterConfirmStatus();
-  };
 
   // ---------- manage panel ----------
   function renderManagePanel(){
@@ -802,37 +835,34 @@ If you can't find enough genuine real matches, return fewer items rather than in
       alert('Add at least a couple of spots first (tap "Edit spots").');
       return;
     }
-    filters = (await safeGet('filters', true)) || filters;
-    const { aOk, bOk } = await renderFilterConfirmStatus();
-    if(!aOk || !bOk){
-      const missing = [!aOk && names.a, !bOk && names.b].filter(Boolean).join(' and ');
-      alert(`Both of you need to confirm the current filters first. Still waiting on: ${missing}.\n\nOpen "Set filters" and tap "Confirm my filters".`);
-      document.getElementById('filterPanel').classList.remove('hidden');
-      document.getElementById('managePanel').classList.add('hidden');
-      renderFilterPanel();
-      return;
-    }
+    await loadMyFilters();
+    const partnerFilters = await loadPartnerFilters();
+    const combined = combineFilters(filters, partnerFilters);
+
     const btn = document.getElementById('btnShuffle');
     const originalLabel = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Shuffling...';
 
-    let pool = restaurants.filter(r => r.price <= filters.budget &&
-      (filters.areas.length===0 || filters.areas.includes(r.distance)) &&
-      (filters.cuisines.length===0 || filters.cuisines.includes(r.cuisine)));
+    let pool = restaurants.filter(r => r.price <= combined.budget &&
+      (combined.areas.length===0 || combined.areas.includes(r.distance)) &&
+      (combined.cuisines.length===0 || combined.cuisines.includes(r.cuisine)));
     let wildcardPool = restaurants.filter(r => !pool.find(p=>p.id===r.id));
     if(pool.length===0){ pool = [...restaurants]; wildcardPool = []; }
     pool = shuffle(pool);
 
-    // Every 4 matching cards gets one wildcard slot, alternating internal (from your
+    // Every Nth matching card gets one wildcard slot, alternating internal (from your
     // own list, but filtered out) / external (a real find from outside your list).
-    const wildcardSlots = Math.floor(pool.length / 4);
+    // A mismatch on area or cuisine halves that interval, since the dimension that
+    // couldn't agree is being ignored for this round and wildcards make up for it.
+    const wildcardEvery = (combined.areaMismatch || combined.cuisineMismatch) ? 2 : 4;
+    const wildcardSlots = Math.floor(pool.length / wildcardEvery);
     const externalSlotsNeeded = aiAssistEnabled ? Math.floor(wildcardSlots / 2) : 0;
     let externalCandidates = [];
     if(externalSlotsNeeded > 0){
       btn.textContent = 'Scouting a wildcard...';
       const coords = await getGeolocation();
-      externalCandidates = await fetchExternalWildcards(externalSlotsNeeded, coords, restaurants.map(r=>r.name), filters);
+      externalCandidates = await fetchExternalWildcards(externalSlotsNeeded, coords, restaurants.map(r=>r.name), combined);
     }
 
     const deck = [];
@@ -841,7 +871,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
     let wIdx = 0, exIdx = 0, wildcardCount = 0;
     pool.forEach((r,i)=>{
       deck.push(r.id);
-      if((i+1)%4===0){
+      if((i+1)%wildcardEvery===0){
         const wantsExternal = wildcardCount % 2 === 1; // slot 0 = internal, slot 1 = external, alternating
         let card = null;
         if(wantsExternal && externalCandidates.length){
@@ -860,7 +890,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
       }
     });
 
-    const newRound = { id: uid(), filters: {...filters}, deck, wildcardIds, externalCards, createdAt: Date.now() };
+    const newRound = { id: uid(), filters: combined, areaMismatch: combined.areaMismatch, cuisineMismatch: combined.cuisineMismatch, deck, wildcardIds, externalCards, createdAt: Date.now() };
     // best-effort cleanup of old votes
     if(round){
       await safeDelete('votes:'+round.id+':a', true);
@@ -936,7 +966,12 @@ If you can't find enough genuine real matches, return fewer items rather than in
     if(!r){ deckIndex++; renderRound(); return; }
     const isWildcard = round.wildcardIds.includes(restaurantId);
     const flagLabel = r.external ? '✦ NEW FIND' : '★ WILDCARD';
+    const mismatchNotes = [];
+    if(round.areaMismatch) mismatchNotes.push('no area overlap — showing wildcards from anywhere');
+    if(round.cuisineMismatch) mismatchNotes.push('no cuisine overlap — showing wildcards across cuisines');
+    const mismatchBanner = mismatchNotes.length ? `<div class="small-note" style="text-align:center;margin-bottom:10px;">⚠ ${escapeHtml(mismatchNotes.join(' · '))}</div>` : '';
     mainArea.innerHTML = `
+      ${mismatchBanner}
       <div class="progress">Card ${deckIndex+1} of ${round.deck.length}</div>
       <div class="deck-wrap">
         <div class="card" id="activeCard">
