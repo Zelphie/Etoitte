@@ -65,8 +65,9 @@ async function handleAreas(request, env) {
     } catch (e) {
       return json({ error: "invalid json" }, 400);
     }
-    if (!body.labels || typeof body.labels !== "object" || !body.centroids || typeof body.centroids !== "object") {
-      return json({ error: "labels and centroids objects required" }, 400);
+    if (!body.labels || typeof body.labels !== "object" || !body.centroids || typeof body.centroids !== "object" ||
+        !body.regions || typeof body.regions !== "object") {
+      return json({ error: "labels, centroids, and regions objects required" }, 400);
     }
     await env.ETOITTE_KV.put("config:areas", JSON.stringify(body));
     return json({ ok: true });

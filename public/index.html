@@ -67,6 +67,11 @@
     border:1px solid rgba(239,227,200,0.25);background:transparent;color:var(--paper);cursor:pointer;
   }
   .chip.selected{background:var(--yes);border-color:var(--yes);color:var(--paper);font-weight:600;}
+  .region-section{margin:10px 0 4px;}
+  .region-chip{font-weight:600;margin-bottom:6px;}
+  .region-chip.region-full{background:var(--yes);border-color:var(--yes);color:var(--paper);}
+  .region-chip.region-partial{background:rgba(232,169,59,0.25);border-color:var(--butter);color:var(--paper);}
+  .region-children{margin-left:2px;padding-left:10px;border-left:2px solid rgba(239,227,200,0.15);}
   input[type=text]{
     width:100%;padding:9px 10px;border-radius:8px;border:1px solid rgba(239,227,200,0.25);
     background:var(--ink);color:var(--paper);font-family:'Inter',sans-serif;font-size:14px;
@@ -193,8 +198,8 @@
     </div>
     <div class="field">
       <label>Areas that work (tap any — none selected means anywhere)</label>
-      <div class="chip-row" id="areaChips"></div>
-      <div class="small-note">"Walkable" is judged from wherever you are when you set up a spot — not from a fixed location.</div>
+      <div id="areaChips"></div>
+      <div class="small-note">"Walkable" is judged from wherever you are when you set up a spot — not from a fixed location. Tap a region to select all its neighborhoods at once, or pick individual ones directly.</div>
     </div>
     <div class="field">
       <label>Cuisine (optional, tap any that work)</label>
@@ -227,7 +232,7 @@
     </div>
     <div class="field">
       <label>Areas (tap any that apply)</label>
-      <div class="chip-row" id="newAreaChips"></div>
+      <div id="newAreaChips"></div>
     </div>
     <div class="field">
       <input type="text" id="newAddress" placeholder="Exact address (optional, for future features)">
@@ -359,8 +364,17 @@
     sengkang: 'Sengkang',
     yishun: 'Yishun',
     woodlands: 'Woodlands',
-    jurong: 'Jurong',
-    clementi: 'Clementi & West Coast'
+    thomson: 'Thomson',
+    sembawang: 'Sembawang',
+    jurongeast: 'Jurong East',
+    jurongwest: 'Jurong West',
+    boonlay: 'Boon Lay & Pioneer',
+    clementi: 'Clementi',
+    westcoast: 'West Coast',
+    bukittimah: 'Bukit Timah',
+    bukitbatok: 'Bukit Batok',
+    bukitpanjang: 'Bukit Panjang',
+    choachukang: 'Choa Chu Kang'
   };
   // rough centroids (planning-area-ish coordinates) for classifying a lat/lng into one of the
   // neighborhoods above. No entry for 'walkable' — that's relative to the user, not a fixed spot.
@@ -385,44 +399,68 @@
     sengkang: {lat:1.3868, lng:103.8952},
     yishun: {lat:1.4295, lng:103.8353},
     woodlands: {lat:1.4360, lng:103.7865},
-    jurong: {lat:1.3329, lng:103.7436},
-    clementi: {lat:1.3151, lng:103.7649}
+    thomson: {lat:1.3547, lng:103.8352},
+    sembawang: {lat:1.4491, lng:103.8200},
+    jurongeast: {lat:1.3329, lng:103.7436},
+    jurongwest: {lat:1.3505, lng:103.7060},
+    boonlay: {lat:1.3389, lng:103.7065},
+    clementi: {lat:1.3151, lng:103.7649},
+    westcoast: {lat:1.3038, lng:103.7649},
+    bukittimah: {lat:1.3410, lng:103.7764},
+    bukitbatok: {lat:1.3590, lng:103.7637},
+    bukitpanjang: {lat:1.3774, lng:103.7642},
+    choachukang: {lat:1.3854, lng:103.7443}
   };
   const DEFAULT_WALKABLE_RADIUS_KM = 1.2;
+  // General-region layer above the neighborhoods, purely a UI grouping/shorthand — never
+  // stored in filters.areas or a restaurant's areas (see renderAreaSelector). A neighborhood
+  // can belong to more than one region (bukittimah spans Central and West); the arrays are
+  // plain lists and are not expected to be disjoint.
+  const DEFAULT_REGIONS = {
+    central: ['downtown','chinatown','orchard','newton','novena','toapayoh','tiongbahru','queenstown','hollandv','onenorth','bukittimah'],
+    east: ['katong','eastcoast','tampines','bedok'],
+    northeast: ['serangoon','hougang','punggol','sengkang'],
+    north: ['yishun','woodlands','thomson','sembawang'],
+    west: ['jurongeast','jurongwest','boonlay','clementi','westcoast','bukittimah','bukitbatok','bukitpanjang','choachukang']
+  };
+  const DEFAULT_REGION_LABELS = { central: 'Central', east: 'East', northeast: 'North-East', north: 'North', west: 'West' };
 
   // Current area config — replaced wholesale by loadAreaConfig() once /api/areas resolves.
   let AREA_LABELS = DEFAULT_AREA_LABELS;
   let AREA_CENTROIDS = DEFAULT_AREA_CENTROIDS;
+  let REGIONS = DEFAULT_REGIONS;
+  let REGION_LABELS = DEFAULT_REGION_LABELS;
   let WALKABLE_RADIUS_KM = DEFAULT_WALKABLE_RADIUS_KM;
 
   // Areas used to be edited by shipping new source — now they're KV-backed config (see
   // src/worker.js's /api/areas) so they can be tweaked without a redeploy. Falls back to,
   // and seeds KV with, the built-in defaults above the first time the app runs.
   async function loadAreaConfig(){
+    let data = null;
     try{
       const resp = await fetch('/api/areas');
-      if(resp.ok){
-        const data = await resp.json();
-        if(data && data.labels && data.centroids){
-          AREA_LABELS = data.labels;
-          AREA_CENTROIDS = data.centroids;
-          WALKABLE_RADIUS_KM = typeof data.walkableRadiusKm === 'number' ? data.walkableRadiusKm : DEFAULT_WALKABLE_RADIUS_KM;
-          return;
-        }
-      }
+      if(resp.ok) data = await resp.json();
     }catch(e){
       console.error('area config load failed, using built-in defaults', e);
     }
-    AREA_LABELS = DEFAULT_AREA_LABELS;
-    AREA_CENTROIDS = DEFAULT_AREA_CENTROIDS;
-    WALKABLE_RADIUS_KM = DEFAULT_WALKABLE_RADIUS_KM;
-    try{
-      await fetch('/api/areas', {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({labels: AREA_LABELS, centroids: AREA_CENTROIDS, walkableRadiusKm: WALKABLE_RADIUS_KM})
-      });
-    }catch(e){ /* best-effort seed — the app runs fine from the built-in defaults either way */ }
+    AREA_LABELS = (data && data.labels) || DEFAULT_AREA_LABELS;
+    AREA_CENTROIDS = (data && data.centroids) || DEFAULT_AREA_CENTROIDS;
+    REGIONS = (data && data.regions) || DEFAULT_REGIONS;
+    REGION_LABELS = (data && data.regionLabels) || DEFAULT_REGION_LABELS;
+    WALKABLE_RADIUS_KM = (data && typeof data.walkableRadiusKm === 'number') ? data.walkableRadiusKm : DEFAULT_WALKABLE_RADIUS_KM;
+    // Re-seed KV whenever anything came back missing — covers both a brand-new store and an
+    // older store from before the region layer existed (labels/centroids present, regions not).
+    // Merges rather than clobbers: whatever *did* come back above is what gets written back.
+    const incomplete = !data || !data.labels || !data.centroids || !data.regions || !data.regionLabels || typeof data.walkableRadiusKm !== 'number';
+    if(incomplete){
+      try{
+        await fetch('/api/areas', {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({labels: AREA_LABELS, centroids: AREA_CENTROIDS, regions: REGIONS, regionLabels: REGION_LABELS, walkableRadiusKm: WALKABLE_RADIUS_KM})
+        });
+      }catch(e){ /* best-effort seed — the app runs fine from the built-in defaults either way */ }
+    }
   }
 
   // Legacy pre-precinct-refresh keys -> the combined-precinct key that replaced them. Kept only
@@ -442,23 +480,53 @@
     serangoon: ['serangoon','hougang'],
     punggol: ['punggol','sengkang'],
     north: ['yishun','woodlands'],
-    west: ['jurong','clementi']
+    west: ['jurong','clementi'],
+    // 'jurong' was a single leaf key (not a combined-precinct label) but is retired in favor of
+    // two new, more specific ones — neither reused, same rule as city/east/north/west above.
+    jurong: ['jurongeast','jurongwest'],
+    // 'clementi' keeps its name for the narrower half of its own split (same pattern as
+    // novena/tiongbahru/etc.) — note this target list includes its own source key, which is
+    // exactly the self-reference expandAreaKey's ancestor guard exists to handle.
+    clementi: ['clementi','westcoast']
   };
   function migrateAreaKey(key){ return AREA_KEY_MIGRATION[key] || key; }
-  function expandAreaKey(key){
+  // Expands one stored key into its current-key equivalents, walking the migration chain to a
+  // fixed point (e.g. the legacy 'west' combined-precinct key -> ['jurong','clementi'] -> each of
+  // those split again -> ['jurongeast','jurongwest','clementi','westcoast']). `ancestors` guards
+  // against infinite recursion on self-referencing entries like clementi -> ['clementi', ...] —
+  // once a (renamed) key has been expanded once on this path, further occurrences of it are
+  // treated as already-resolved rather than looked up again.
+  function expandAreaKey(key, ancestors){
+    ancestors = ancestors || new Set();
     const renamed = migrateAreaKey(key);
-    return AREA_SPLIT_MIGRATION[renamed] || [renamed];
+    if(ancestors.has(renamed)) return [renamed];
+    const children = AREA_SPLIT_MIGRATION[renamed];
+    if(!children) return [renamed];
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(renamed);
+    return children.flatMap(child => expandAreaKey(child, nextAncestors));
   }
   // Normalizes a stored area value — which may be an old single-string key (the legacy
   // `distance` field), an old combined-precinct key, or an already-migrated array — into a
   // deduped array of current area keys. Safe to call repeatedly (idempotent).
   function migrateAreaKeys(value){
     const list = Array.isArray(value) ? value : (value ? [value] : []);
-    return Array.from(new Set(list.flatMap(expandAreaKey)));
+    return Array.from(new Set(list.flatMap(key => expandAreaKey(key))));
   }
   function areaLabel(key){ return AREA_LABELS[key] || 'Area not set'; }
   function areaLabelsText(keys){
     return (keys && keys.length) ? keys.map(areaLabel).join(', ') : 'Area not set';
+  }
+  // Deduped set of every neighborhood key that appears in at least one region — a Set, so a
+  // multi-region key like bukittimah (in both 'central' and 'west') is only counted once. Used
+  // to find any current AREA_LABELS key that isn't assigned to a region (normally none, besides
+  // 'walkable' which is deliberately unassigned).
+  function allRegionedKeys(){
+    return new Set(Object.values(REGIONS).flat());
+  }
+  function ungroupedAreaKeys(){
+    const grouped = allRegionedKeys();
+    return Object.keys(AREA_LABELS).filter(key => key !== 'walkable' && !grouped.has(key));
   }
   let newSpotAreas = []; // areas picked (chip multi-select) for the spot currently being added
   let deckIndex = 0;
@@ -609,40 +677,82 @@
     });
   }
 
-  function renderAreaChips(){
-    const wrap = document.getElementById('areaChips');
+  function buildNeighborhoodChip(key, selected, onToggle){
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip' + (selected.includes(key) ? ' selected' : '');
+    chip.textContent = areaLabel(key);
+    chip.onclick = ()=> onToggle(key);
+    return chip;
+  }
+
+  // Two-step region/neighborhood picker, shared by the filter panel (#areaChips) and the
+  // add-spot form (#newAreaChips). `getSelected()` reads the current array of selected
+  // neighborhood keys; `applyChange(next)` receives the full next array and does whatever that
+  // call site needs to persist/re-render it (updateFilters() vs. a plain local reassignment).
+  //
+  // Region chips are a pure UI shorthand — clicking one is exactly "add/remove this region's
+  // own child list" and nothing else; it never inspects any other region's state. A region's
+  // empty/partial/full display is derived fresh from `selected` on every render, never stored,
+  // so it can't drift out of sync, and a neighborhood that belongs to more than one region (e.g.
+  // bukittimah, in both 'central' and 'west') just gets counted independently by each region's
+  // own derivation — no special-casing needed for the overlap.
+  function renderAreaSelector(containerId, getSelected, applyChange){
+    const wrap = document.getElementById(containerId);
+    if(!wrap) return;
     wrap.innerHTML = '';
-    Object.keys(AREA_LABELS).forEach(key=>{
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'chip' + (filters.areas.includes(key) ? ' selected' : '');
-      chip.textContent = AREA_LABELS[key];
-      chip.onclick = ()=> updateFilters(f=>{
-        if(f.areas.includes(key)) f.areas = f.areas.filter(x=>x!==key);
-        else f.areas.push(key);
-      });
-      wrap.appendChild(chip);
+    const selected = getSelected();
+    const toggleKey = key=>{
+      const next = selected.includes(key) ? selected.filter(x=>x!==key) : [...selected, key];
+      applyChange(next);
+    };
+
+    // 'walkable' plus anything not currently assigned to any region (normally nothing) — shown
+    // outside the region sections since it has no single fixed-region home.
+    const ungroupedRow = document.createElement('div');
+    ungroupedRow.className = 'chip-row';
+    ['walkable', ...ungroupedAreaKeys()].forEach(key=>{
+      ungroupedRow.appendChild(buildNeighborhoodChip(key, selected, toggleKey));
+    });
+    wrap.appendChild(ungroupedRow);
+
+    Object.keys(REGIONS).forEach(regionKey=>{
+      const children = REGIONS[regionKey];
+      const selectedCount = children.filter(k=>selected.includes(k)).length;
+      const state = selectedCount===0 ? 'empty' : (selectedCount===children.length ? 'full' : 'partial');
+
+      const section = document.createElement('div');
+      section.className = 'region-section';
+
+      const regionChip = document.createElement('button');
+      regionChip.type = 'button';
+      regionChip.className = 'chip region-chip region-' + state;
+      regionChip.textContent = (REGION_LABELS[regionKey] || regionKey) + (state==='partial' ? ` (${selectedCount}/${children.length})` : '');
+      regionChip.onclick = ()=>{
+        const next = state==='full'
+          ? selected.filter(k=>!children.includes(k))        // full -> deselect exactly this region's children
+          : Array.from(new Set([...selected, ...children])); // empty/partial -> select all of this region's children
+        applyChange(next);
+      };
+      section.appendChild(regionChip);
+
+      const childRow = document.createElement('div');
+      childRow.className = 'chip-row region-children';
+      children.forEach(key=> childRow.appendChild(buildNeighborhoodChip(key, selected, toggleKey)));
+      section.appendChild(childRow);
+
+      wrap.appendChild(section);
     });
   }
 
-  // Multi-select area chips for the "add a spot" form — separate from the filter panel's
-  // #areaChips since it edits a single restaurant's areas (newSpotAreas), not a filter set.
+  function renderAreaChips(){
+    renderAreaSelector('areaChips', ()=>filters.areas, next=> updateFilters(f=>{ f.areas = next; }));
+  }
+
+  // Same picker for the "add a spot" form — separate from the filter panel's #areaChips since
+  // it edits a single restaurant's areas (newSpotAreas), not a filter set.
   function renderNewAreaChips(){
-    const wrap = document.getElementById('newAreaChips');
-    if(!wrap) return;
-    wrap.innerHTML = '';
-    Object.keys(AREA_LABELS).forEach(key=>{
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'chip' + (newSpotAreas.includes(key) ? ' selected' : '');
-      chip.textContent = AREA_LABELS[key];
-      chip.onclick = ()=>{
-        if(newSpotAreas.includes(key)) newSpotAreas = newSpotAreas.filter(x=>x!==key);
-        else newSpotAreas.push(key);
-        renderNewAreaChips();
-      };
-      wrap.appendChild(chip);
-    });
+    renderAreaSelector('newAreaChips', ()=>newSpotAreas, next=>{ newSpotAreas = next; renderNewAreaChips(); });
   }
 
   async function loadPartnerFilters(){
