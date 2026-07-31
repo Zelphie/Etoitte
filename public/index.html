@@ -194,12 +194,17 @@
       <label>Areas that work (tap any — none selected means anywhere)</label>
       <div class="chip-row" id="areaChips">
         <button class="chip" data-val="walkable">Walkable</button>
-        <button class="chip" data-val="north">North (Yishun, Woodlands)</button>
-        <button class="chip" data-val="northeast">North-East (Punggol, Sengkang)</button>
-        <button class="chip" data-val="east">East (Tampines, Bedok)</button>
-        <button class="chip" data-val="central">Central (Novena, Toa Payoh)</button>
-        <button class="chip" data-val="westcentral">West Central (Holland V, one-north)</button>
-        <button class="chip" data-val="west">West (Jurong, Boon Lay)</button>
+        <button class="chip" data-val="city">City, Chinatown &amp; CBD</button>
+        <button class="chip" data-val="orchard">Orchard &amp; Newton</button>
+        <button class="chip" data-val="novena">Novena &amp; Toa Payoh</button>
+        <button class="chip" data-val="tiongbahru">Tiong Bahru &amp; Queenstown</button>
+        <button class="chip" data-val="hollandv">Holland V &amp; one-north</button>
+        <button class="chip" data-val="katong">Katong &amp; East Coast</button>
+        <button class="chip" data-val="east">Tampines &amp; Bedok</button>
+        <button class="chip" data-val="serangoon">Serangoon &amp; Hougang</button>
+        <button class="chip" data-val="punggol">Punggol &amp; Sengkang</button>
+        <button class="chip" data-val="north">Yishun &amp; Woodlands</button>
+        <button class="chip" data-val="west">Jurong &amp; the West</button>
       </div>
       <div class="small-note">"Walkable" is judged from wherever you are when you set up a spot — not from a fixed location.</div>
     </div>
@@ -236,13 +241,21 @@
       </select>
       <select id="newDist" style="flex:1;padding:9px;border-radius:8px;background:var(--ink);color:var(--paper);border:1px solid rgba(239,227,200,0.25);">
         <option value="walkable">Walkable</option>
-        <option value="north">North (Yishun, Woodlands)</option>
-        <option value="northeast">North-East (Punggol, Sengkang)</option>
-        <option value="east">East (Tampines, Bedok)</option>
-        <option value="central">Central (Novena, Toa Payoh)</option>
-        <option value="westcentral">West Central (Holland V, one-north)</option>
-        <option value="west">West (Jurong, Boon Lay)</option>
+        <option value="city">City, Chinatown & CBD</option>
+        <option value="orchard">Orchard & Newton</option>
+        <option value="novena">Novena & Toa Payoh</option>
+        <option value="tiongbahru">Tiong Bahru & Queenstown</option>
+        <option value="hollandv">Holland V & one-north</option>
+        <option value="katong">Katong & East Coast</option>
+        <option value="east">Tampines & Bedok</option>
+        <option value="serangoon">Serangoon & Hougang</option>
+        <option value="punggol">Punggol & Sengkang</option>
+        <option value="north">Yishun & Woodlands</option>
+        <option value="west">Jurong & the West</option>
       </select>
+    </div>
+    <div class="field">
+      <input type="text" id="newAddress" placeholder="Exact address (optional, for future features)">
     </div>
     <div class="field">
       <input type="text" id="newNotes" placeholder="Notes (optional — 'get the katsu')">
@@ -303,13 +316,16 @@
   let aiAssistEnabled = false; // shared toggle for Maps autofill + wildcard suggestions (costs API $, off by default)
   let palettes = { a: 'forest', b: 'forest' }; // each person's own colour scheme, applied only while their tab is active
 
-  const PALETTE_ORDER = ['forest','midnight','rosewood','teal','mono'];
+  const PALETTE_ORDER = ['forest','midnight','rosewood','teal','mono','blossom','lavender','peach'];
   const PALETTES = {
     forest:   { name:'Forest',   ink:'#16231F', ink2:'#1D2E28', paper:'#EFE3C8', paper2:'#E7D9B8', accent:'#E8A93B', yes:'#3F7D5C', no:'#C1443B', text:'#201C14', muted:'#8A8370', shadow:'rgba(0,0,0,0.35)' },
     midnight: { name:'Midnight', ink:'#171833', ink2:'#20244A', paper:'#ECE7F7', paper2:'#DFD8F0', accent:'#9B7FF0', yes:'#3F7D5C', no:'#C1443B', text:'#211D3A', muted:'#8480A3', shadow:'rgba(10,5,40,0.4)' },
     rosewood: { name:'Rosewood', ink:'#2B1418', ink2:'#3A1C22', paper:'#F5E4DE', paper2:'#EED4CC', accent:'#D97757', yes:'#3F7D5C', no:'#B23A46', text:'#2E1A16', muted:'#A2857E', shadow:'rgba(30,5,10,0.4)' },
     teal:     { name:'Deep Teal',ink:'#0F2320', ink2:'#163330', paper:'#EFE9D8', paper2:'#E3DBC2', accent:'#4FB6A8', yes:'#5C9C4A', no:'#C1443B', text:'#16241F', muted:'#839084', shadow:'rgba(0,15,15,0.4)' },
-    mono:     { name:'Charcoal', ink:'#1C1C1C', ink2:'#262626', paper:'#EDEAE3', paper2:'#E0DCD2', accent:'#C9A227', yes:'#4A7A55', no:'#B04A42', text:'#1E1E1E', muted:'#8C8C8C', shadow:'rgba(0,0,0,0.45)' }
+    mono:     { name:'Charcoal', ink:'#1C1C1C', ink2:'#262626', paper:'#EDEAE3', paper2:'#E0DCD2', accent:'#C9A227', yes:'#4A7A55', no:'#B04A42', text:'#1E1E1E', muted:'#8C8C8C', shadow:'rgba(0,0,0,0.45)' },
+    blossom:  { name:'Blossom',  ink:'#3B1F2B', ink2:'#4A2736', paper:'#FDEEF3', paper2:'#FADCE6', accent:'#F472B6', yes:'#6FA287', no:'#D9534F', text:'#3A1C28', muted:'#B98CA0', shadow:'rgba(60,10,30,0.35)' },
+    lavender: { name:'Lavender', ink:'#2A2440', ink2:'#362E52', paper:'#F1EDFB', paper2:'#E4DCF7', accent:'#B794F6', yes:'#3F7D5C', no:'#C1443B', text:'#29233F', muted:'#9C93B8', shadow:'rgba(20,10,45,0.35)' },
+    peach:    { name:'Peach',    ink:'#3A2417', ink2:'#4A2F1E', paper:'#FDF0E4', paper2:'#FBE3CE', accent:'#FDBA74', yes:'#5C9C4A', no:'#E0836F', text:'#3D2818', muted:'#B99B85', shadow:'rgba(50,20,5,0.35)' }
   };
   function applyPalette(){
     const p = PALETTES[palettes[me]] || PALETTES.forest;
@@ -346,23 +362,36 @@
 
   const AREA_LABELS = {
     walkable: 'Walkable',
-    north: 'North (Yishun, Woodlands)',
-    northeast: 'North-East (Punggol, Sengkang)',
-    east: 'East (Tampines, Bedok)',
-    central: 'Central (Novena, Toa Payoh)',
-    westcentral: 'West Central (Holland V, one-north)',
-    west: 'West (Jurong, Boon Lay)'
+    city: 'City, Chinatown & CBD',
+    orchard: 'Orchard & Newton',
+    novena: 'Novena & Toa Payoh',
+    tiongbahru: 'Tiong Bahru & Queenstown',
+    hollandv: 'Holland V & one-north',
+    katong: 'Katong & East Coast',
+    east: 'Tampines & Bedok',
+    serangoon: 'Serangoon & Hougang',
+    punggol: 'Punggol & Sengkang',
+    north: 'Yishun & Woodlands',
+    west: 'Jurong & the West'
   };
-  // rough centroids for classifying a lat/lng into one of the areas above
+  // rough centroids (real planning-area coordinates) for classifying a lat/lng into one of the areas above
   const AREA_CENTROIDS = {
-    north: {lat:1.435, lng:103.810},
-    northeast: {lat:1.377, lng:103.887},
-    east: {lat:1.348, lng:103.944},
-    central: {lat:1.328, lng:103.842},
-    westcentral: {lat:1.306, lng:103.790},
-    west: {lat:1.329, lng:103.738}
+    city: {lat:1.283, lng:103.848},
+    orchard: {lat:1.308, lng:103.835},
+    novena: {lat:1.335, lng:103.850},
+    tiongbahru: {lat:1.289, lng:103.816},
+    hollandv: {lat:1.305, lng:103.792},
+    katong: {lat:1.308, lng:103.895},
+    east: {lat:1.337, lng:103.942},
+    serangoon: {lat:1.365, lng:103.868},
+    punggol: {lat:1.396, lng:103.897},
+    north: {lat:1.439, lng:103.815},
+    west: {lat:1.347, lng:103.746}
   };
-  function areaLabel(key){ return AREA_LABELS[key] || 'Area not set'; }
+  // maps area keys used before the area-accuracy refresh to their current replacement
+  const AREA_KEY_MIGRATION = { northeast: 'punggol', central: 'novena', westcentral: 'hollandv' };
+  function migrateAreaKey(key){ return AREA_KEY_MIGRATION[key] || key; }
+  function areaLabel(key){ return AREA_LABELS[migrateAreaKey(key)] || 'Area not set'; }
   let deckIndex = 0;
   let pollTimer = null;
 
@@ -393,10 +422,17 @@
     applyPalette();
     renderPaletteRow();
     restaurants = (await safeGet('restaurants', true)) || [];
+    let areasMigrated = false;
+    restaurants.forEach(r=>{
+      const migrated = migrateAreaKey(r.distance);
+      if(migrated !== r.distance){ r.distance = migrated; areasMigrated = true; }
+    });
+    if(areasMigrated) await safeSet('restaurants', restaurants, true);
     round = await safeGet('current_round', true);
     aiAssistEnabled = !!(await safeGet('ai_assist_enabled', true));
     renderAiToggle();
     filters = (await safeGet('filters', true)) || filters;
+    filters.areas = filters.areas.map(migrateAreaKey);
     renderManagePanel();
     await renderFilterPanel();
     await loadRoundState();
@@ -523,7 +559,8 @@
       row.className = 'list-item';
       const priceStr = '$'.repeat(r.price);
       const distStr = areaLabel(r.distance);
-      row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span></div>`;
+      const addressLine = r.address ? `<br><span class="meta">${escapeHtml(r.address)}</span>` : '';
+      row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span>${addressLine}</div>`;
       const del = document.createElement('button');
       del.textContent = 'Remove';
       del.onclick = async ()=>{
@@ -610,10 +647,11 @@ Link: ${url}
 ${hints.nameGuess ? 'Text found in the link suggests the name may be: "' + hints.nameGuess + '".' : ''}
 
 Respond with ONLY a JSON object, no markdown fences, no extra commentary, in exactly this shape:
-{"name": "...", "cuisine": "...", "price": 1, "notes": "..."}
+{"name": "...", "cuisine": "...", "price": 1, "address": "...", "notes": "..."}
 
 - "price" must be an integer 1, 2, or 3 (1=$, 2=$$, 3=$$$) — your best estimate of the price level.
 - "cuisine" should be a short label (e.g. "Ramen", "Italian", "Cafe").
+- "address" should be the full street address in Singapore, if you can find it.
 - "notes" should be one short line, under 12 words (e.g. a signature dish or the general vibe).
 If you cannot identify the place at all, respond with exactly {"error": "not found"}.`;
 
@@ -640,6 +678,7 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
         document.getElementById('newName').value = parsed.name || hints.nameGuess || '';
         document.getElementById('newCuisine').value = parsed.cuisine || '';
         if(parsed.price >= 1 && parsed.price <= 3) document.getElementById('newPrice').value = String(parsed.price);
+        document.getElementById('newAddress').value = parsed.address || '';
         document.getElementById('newNotes').value = parsed.notes || '';
         statusEl.textContent = 'Filled in below — check it over, then add to the list.';
         if(hints.lat != null && hints.lng != null) suggestDistance(hints.lat, hints.lng, statusEl);
@@ -658,11 +697,13 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
     const cuisine = document.getElementById('newCuisine').value.trim();
     const price = parseInt(document.getElementById('newPrice').value,10);
     const distance = document.getElementById('newDist').value;
+    const address = document.getElementById('newAddress').value.trim();
     const notes = document.getElementById('newNotes').value.trim();
-    restaurants.push({id: uid(), name, cuisine, price, distance, notes});
+    restaurants.push({id: uid(), name, cuisine, price, distance, address, notes});
     await safeSet('restaurants', restaurants, true);
     document.getElementById('newName').value='';
     document.getElementById('newCuisine').value='';
+    document.getElementById('newAddress').value='';
     document.getElementById('newNotes').value='';
     document.getElementById('mapsLink').value='';
     document.getElementById('autofillStatus').textContent='';
@@ -683,9 +724,10 @@ ${cuisineText}
 These are "wildcard" picks meant to nudge the user out of their usual defaults — genuinely new-to-them places, not variations of what they already eat.
 
 Respond with ONLY a JSON array, no markdown fences, no extra commentary, in exactly this shape:
-[{"name":"...", "cuisine":"...", "price":1, "lat":1.30, "lng":103.80, "notes":"..."}]
+[{"name":"...", "cuisine":"...", "price":1, "lat":1.30, "lng":103.80, "address":"...", "notes":"..."}]
 - "price": integer 1-3 matching the scale above.
 - "lat"/"lng": approximate decimal-degree coordinates of the restaurant, so we can tell which part of Singapore it's in.
+- "address": the full street address in Singapore, if known.
 - "notes": one short line, under 12 words.
 If you can't find enough genuine real matches, return fewer items rather than inventing fictitious ones.`;
 
@@ -706,7 +748,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
       const jsonMatch = clean.match(/\[[\s\S]*\]/);
       if(jsonMatch) clean = jsonMatch[0];
       const arr = JSON.parse(clean);
-      const fallbackArea = filters.areas[0] || 'central';
+      const fallbackArea = filters.areas[0] || 'novena';
       return arr.filter(x => x && x.name).map(x => {
         let distance = fallbackArea;
         if(typeof x.lat === 'number' && typeof x.lng === 'number'){
@@ -719,6 +761,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
           cuisine: x.cuisine || '',
           price: (x.price >= 1 && x.price <= 3) ? x.price : filters.budget,
           distance,
+          address: x.address || '',
           notes: x.notes || '',
           external: true
         };
@@ -897,7 +940,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
     if(r.external){
       document.getElementById('btnSaveExternal').onclick = async (e)=>{
         e.stopPropagation();
-        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, distance: r.distance, notes: r.notes});
+        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, distance: r.distance, address: r.address || '', notes: r.notes});
         await safeSet('restaurants', restaurants, true);
         const b = document.getElementById('btnSaveExternal');
         b.textContent = 'Saved ✓'; b.disabled = true;
