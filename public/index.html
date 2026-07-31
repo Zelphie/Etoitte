@@ -425,6 +425,18 @@
   };
   const DEFAULT_REGION_LABELS = { central: 'Central', east: 'East', northeast: 'North-East', north: 'North', west: 'West' };
 
+  // Bump whenever DEFAULT_AREA_LABELS/CENTROIDS/REGIONS/REGION_LABELS gain, lose, or rename a
+  // key. A stored config whose own configVersion is behind this gets those four keyed maps
+  // fully resynced from the current defaults on next load (see loadAreaConfig): new keys get
+  // added, keys the running code no longer defines get dropped, and text for keys that changed
+  // gets refreshed. Below this gate, "the KV blob already has a labels object" used to be
+  // treated as "nothing to do here" even when that object's *content* was stale by a version or
+  // two — that's what caused new neighborhoods (bukittimah, thomson, jurongeast, ...) to render
+  // with no label, the retired 'jurong' key to keep rendering as a stray ungrouped chip, and
+  // clementi's label to keep showing its old pre-split text, after this went live with a KV
+  // store that already had a round-1-shaped labels/centroids blob in it.
+  const AREA_CONFIG_VERSION = 1;
+
   // Current area config — replaced wholesale by loadAreaConfig() once /api/areas resolves.
   let AREA_LABELS = DEFAULT_AREA_LABELS;
   let AREA_CENTROIDS = DEFAULT_AREA_CENTROIDS;
@@ -433,8 +445,7 @@
   let WALKABLE_RADIUS_KM = DEFAULT_WALKABLE_RADIUS_KM;
 
   // Areas used to be edited by shipping new source — now they're KV-backed config (see
-  // src/worker.js's /api/areas) so they can be tweaked without a redeploy. Falls back to,
-  // and seeds KV with, the built-in defaults above the first time the app runs.
+  // src/worker.js's /api/areas) so they can be tweaked without a redeploy.
   async function loadAreaConfig(){
     let data = null;
     try{
@@ -443,24 +454,40 @@
     }catch(e){
       console.error('area config load failed, using built-in defaults', e);
     }
-    AREA_LABELS = (data && data.labels) || DEFAULT_AREA_LABELS;
-    AREA_CENTROIDS = (data && data.centroids) || DEFAULT_AREA_CENTROIDS;
-    REGIONS = (data && data.regions) || DEFAULT_REGIONS;
-    REGION_LABELS = (data && data.regionLabels) || DEFAULT_REGION_LABELS;
-    WALKABLE_RADIUS_KM = (data && typeof data.walkableRadiusKm === 'number') ? data.walkableRadiusKm : DEFAULT_WALKABLE_RADIUS_KM;
-    // Re-seed KV whenever anything came back missing — covers both a brand-new store and an
-    // older store from before the region layer existed (labels/centroids present, regions not).
-    // Merges rather than clobbers: whatever *did* come back above is what gets written back.
-    const incomplete = !data || !data.labels || !data.centroids || !data.regions || !data.regionLabels || typeof data.walkableRadiusKm !== 'number';
-    if(incomplete){
+
+    const stale = !data || typeof data.configVersion !== 'number' || data.configVersion < AREA_CONFIG_VERSION;
+    if(stale){
+      // Resync the keyed maps wholesale from current defaults rather than merging key-by-key —
+      // there's no way to tell "this key's stored value differs from the current default
+      // because it's stale content from an older code version" apart from "because it's a
+      // deliberate hand-edit", so on a version bump the code's defaults win outright. Only
+      // walkableRadiusKm (a single scalar with no key-churn concept — nothing can be "orphaned"
+      // or "missing" about it the way a map entry can) is preserved from whatever was stored.
+      AREA_LABELS = DEFAULT_AREA_LABELS;
+      AREA_CENTROIDS = DEFAULT_AREA_CENTROIDS;
+      REGIONS = DEFAULT_REGIONS;
+      REGION_LABELS = DEFAULT_REGION_LABELS;
+      WALKABLE_RADIUS_KM = (data && typeof data.walkableRadiusKm === 'number') ? data.walkableRadiusKm : DEFAULT_WALKABLE_RADIUS_KM;
       try{
         await fetch('/api/areas', {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({labels: AREA_LABELS, centroids: AREA_CENTROIDS, regions: REGIONS, regionLabels: REGION_LABELS, walkableRadiusKm: WALKABLE_RADIUS_KM})
+          body: JSON.stringify({
+            labels: AREA_LABELS, centroids: AREA_CENTROIDS, regions: REGIONS, regionLabels: REGION_LABELS,
+            walkableRadiusKm: WALKABLE_RADIUS_KM, configVersion: AREA_CONFIG_VERSION
+          })
         });
-      }catch(e){ /* best-effort seed — the app runs fine from the built-in defaults either way */ }
+      }catch(e){ /* best-effort resync — the app runs fine from the built-in defaults either way */ }
+      return;
     }
+
+    // Already resynced at (or after) this code's version — trust what's stored, including any
+    // manual KV edits made since, rather than overwriting them on every load.
+    AREA_LABELS = data.labels || DEFAULT_AREA_LABELS;
+    AREA_CENTROIDS = data.centroids || DEFAULT_AREA_CENTROIDS;
+    REGIONS = data.regions || DEFAULT_REGIONS;
+    REGION_LABELS = data.regionLabels || DEFAULT_REGION_LABELS;
+    WALKABLE_RADIUS_KM = typeof data.walkableRadiusKm === 'number' ? data.walkableRadiusKm : DEFAULT_WALKABLE_RADIUS_KM;
   }
 
   // Legacy pre-precinct-refresh keys -> the combined-precinct key that replaced them. Kept only
