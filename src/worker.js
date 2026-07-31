@@ -48,10 +48,11 @@ async function handleStorage(request, env) {
 async function handleAnthropic(request, env) {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  // Kill switch: when AI_ASSIST_ENABLED is set to "false" (dashboard var,
-  // not in wrangler.jsonc so it can be flipped without a redeploy), return
-  // immediately with no outbound call to Anthropic at all — zero cost.
-  if (env.AI_ASSIST_ENABLED === "false") {
+  // Off by default. Only "true" (set as a dashboard var, not in
+  // wrangler.jsonc, so it can be flipped without a redeploy) enables
+  // outbound calls to Anthropic — everything else short-circuits here
+  // with zero cost.
+  if (env.AI_ASSIST_ENABLED !== "true") {
     return json({ content: [] });
   }
 
