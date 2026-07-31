@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Etoitte</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink: #16231F;
+    --ink-2: #1D2E28;
+    --paper: #EFE3C8;
+    --paper-2: #E7D9B8;
+    --butter: #E8A93B;
+    --yes: #3F7D5C;
+    --no: #C1443B;
+    --text: #201C14;
+    --muted: #8A8370;
+    --paper-shadow: rgba(0,0,0,0.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--ink);color:var(--paper);font-family:'Inter',sans-serif;min-height:100%;}
+  body{
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(232,169,59,0.06), transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(63,125,92,0.08), transparent 45%);
+    padding-bottom:40px;
+  }
+  .shell{max-width:480px;margin:0 auto;padding:22px 18px 10px;}
+
+  header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;}
+  .title-block .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:var(--butter);text-transform:uppercase;}
+  h1{font-family:'Special Elite',monospace;font-weight:400;font-size:28px;margin:2px 0 0;color:var(--paper);letter-spacing:0.5px;}
+  .who{display:flex;gap:6px;}
+  .who button{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;padding:7px 10px;border-radius:20px;
+    border:1px solid rgba(239,227,200,0.25);background:transparent;color:var(--paper);cursor:pointer;
+  }
+  .who button.active{background:var(--butter);color:var(--ink);border-color:var(--butter);font-weight:600;}
+
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 14px;}
+  .toolbar button{
+    font-family:'Inter',sans-serif;font-size:13px;font-weight:600;padding:9px 13px;border-radius:10px;
+    border:1px solid rgba(239,227,200,0.2);background:var(--ink-2);color:var(--paper);cursor:pointer;
+  }
+  .toolbar button.primary{background:var(--butter);color:var(--ink);border-color:var(--butter);}
+  .toolbar button:active{transform:translateY(1px);}
+
+  .panel{
+    background:var(--ink-2);border:1px solid rgba(239,227,200,0.12);border-radius:14px;padding:16px;margin-bottom:16px;
+  }
+  .panel h2{font-family:'Special Elite',monospace;font-weight:400;font-size:16px;margin:0 0 12px;color:var(--butter);}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;}
+  .chip-row{display:flex;gap:6px;flex-wrap:wrap;}
+  .chip{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 11px;border-radius:8px;
+    border:1px solid rgba(239,227,200,0.25);background:transparent;color:var(--paper);cursor:pointer;
+  }
+  .chip.selected{background:var(--yes);border-color:var(--yes);color:var(--paper);font-weight:600;}
+  input[type=text]{
+    width:100%;padding:9px 10px;border-radius:8px;border:1px solid rgba(239,227,200,0.25);
+    background:var(--ink);color:var(--paper);font-family:'Inter',sans-serif;font-size:14px;
+  }
+  .panel .row{display:flex;gap:8px;}
+  .panel .row > *{flex:1;}
+  .list-item{
+    display:flex;justify-content:space-between;align-items:center;padding:9px 0;
+    border-bottom:1px solid rgba(239,227,200,0.1);font-size:13px;
+  }
+  .list-item .meta{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .list-item button{background:none;border:none;color:var(--no);cursor:pointer;font-size:13px;font-family:'Inter',sans-serif;}
+  .small-note{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5;}
+
+  /* deck */
+  .deck-wrap{position:relative;height:420px;margin:6px 0 18px;}
+  .progress{text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-bottom:10px;}
+  .card{
+    position:absolute;top:0;left:0;right:0;margin:0 auto;width:100%;max-width:400px;height:400px;
+    background:var(--paper);border-radius:6px;color:var(--text);
+    box-shadow:0 14px 30px var(--paper-shadow);padding:26px 24px;display:flex;flex-direction:column;
+    touch-action:none;cursor:grab;user-select:none;
+    background-image:repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(0,0,0,0.035) 28px);
+  }
+  .card::after{
+    content:'';position:absolute;left:0;right:0;bottom:-1px;height:14px;
+    background:
+      radial-gradient(circle at 8px 0, transparent 7px, var(--paper) 7px) 0 -7px / 16px 14px repeat-x;
+  }
+  .card .ticket-no{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:0.08em;}
+  .card .wildcard-flag{
+    position:absolute;top:20px;right:-6px;background:var(--butter);color:var(--ink);font-family:'IBM Plex Mono',monospace;
+    font-size:10px;font-weight:700;padding:4px 10px 4px 12px;letter-spacing:0.06em;transform:rotate(3deg);
+    box-shadow:0 3px 6px rgba(0,0,0,0.25);
+  }
+  .card h3{font-family:'Special Elite',monospace;font-weight:400;font-size:26px;margin:14px 0 8px;line-height:1.15;}
+  .card .tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+  .card .tags span{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 9px;border-radius:6px;background:rgba(0,0,0,0.06);color:var(--text);
+  }
+  .card .notes{font-size:13px;font-style:italic;color:#4a4636;line-height:1.5;margin-top:auto;}
+  .card .stamp{
+    position:absolute;top:40%;left:50%;font-family:'Special Elite',monospace;font-size:52px;font-weight:400;
+    border:6px solid currentColor;border-radius:10px;padding:4px 18px;letter-spacing:2px;opacity:0;
+    transform:translate(-50%,-50%) rotate(-16deg) scale(1.3);pointer-events:none;transition:opacity .15s, transform .15s;
+  }
+  .card .stamp.show{opacity:0.9;transform:translate(-50%,-50%) rotate(-16deg) scale(1);}
+  .card .stamp.yes{color:var(--yes);}
+  .card .stamp.no{color:var(--no);}
+
+  .swipe-actions{display:flex;justify-content:center;gap:22px;margin-top:14px;}
+  .swipe-actions button{
+    width:64px;height:64px;border-radius:50%;border:2px solid rgba(239,227,200,0.25);background:var(--ink-2);
+    font-size:26px;cursor:pointer;color:var(--paper);
+  }
+  .swipe-actions button.no{color:var(--no);border-color:rgba(193,68,59,0.4);}
+  .swipe-actions button.yes{color:var(--yes);border-color:rgba(63,125,92,0.4);}
+
+  .status-block{text-align:center;padding:40px 10px;}
+  .status-block .spinner{
+    width:26px;height:26px;border-radius:50%;border:3px solid rgba(239,227,200,0.2);border-top-color:var(--butter);
+    margin:0 auto 14px;animation:spin 0.9s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .status-block p{font-size:14px;color:var(--paper);}
+  .status-block .sub{color:var(--muted);font-size:12px;margin-top:4px;}
+
+  .match-card{
+    background:var(--paper);color:var(--text);border-radius:10px;padding:18px 20px;margin-bottom:12px;
+    box-shadow:0 8px 20px var(--paper-shadow);position:relative;
+  }
+  .match-card.pick{border:2px solid var(--butter);}
+  .match-card .badge{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--butter);color:var(--ink);
+    padding:3px 8px;border-radius:5px;display:inline-block;margin-bottom:8px;font-weight:700;letter-spacing:0.05em;
+  }
+  .match-card h3{font-family:'Special Elite',monospace;font-weight:400;font-size:20px;margin:0 0 6px;}
+  .match-card .tags span{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 8px;border-radius:5px;background:rgba(0,0,0,0.06);margin-right:6px;}
+
+  .hidden{display:none !important;}
+  .overlay{
+    position:fixed;inset:0;background:rgba(22,35,31,0.92);display:flex;align-items:center;justify-content:center;
+    padding:24px;z-index:20;
+  }
+  .overlay-box{background:var(--ink-2);border-radius:14px;padding:24px;max-width:380px;width:100%;border:1px solid rgba(239,227,200,0.15);}
+  .overlay-box h2{font-family:'Special Elite',monospace;font-weight:400;font-size:20px;color:var(--butter);margin-top:0;}
+  .overlay-box button.primary{
+    width:100%;margin-top:14px;padding:12px;border-radius:9px;border:none;background:var(--butter);color:var(--ink);
+    font-weight:700;font-size:14px;cursor:pointer;
+  }
+  .link-note{font-size:12px;color:var(--muted);text-align:center;margin-top:18px;line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="title-block">
+      <div class="eyebrow">Party of two</div>
+      <h1>Etoitte</h1>
+    </div>
+    <div class="who" id="whoToggle"></div>
+  </header>
+
+  <div class="toolbar">
+    <button id="btnFilters">Set filters</button>
+    <button id="btnManage">Edit spots</button>
+    <button class="primary" id="btnShuffle">Shuffle a new round</button>
+  </div>
+
+  <div class="panel hidden" id="filterPanel">
+    <h2>What are we in the mood for?</h2>
+    <div class="field">
+      <label>Budget (max)</label>
+      <div class="chip-row" id="budgetChips">
+        <button class="chip" data-val="1">$</button>
+        <button class="chip" data-val="2">$$</button>
+        <button class="chip" data-val="3">$$$</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Areas that work (tap any — none selected means anywhere)</label>
+      <div class="chip-row" id="areaChips">
+        <button class="chip" data-val="walkable">Walkable</button>
+        <button class="chip" data-val="north">North (Yishun, Woodlands)</button>
+        <button class="chip" data-val="northeast">North-East (Punggol, Sengkang)</button>
+        <button class="chip" data-val="east">East (Tampines, Bedok)</button>
+        <button class="chip" data-val="central">Central (Novena, Toa Payoh)</button>
+        <button class="chip" data-val="westcentral">West Central (Holland V, one-north)</button>
+        <button class="chip" data-val="west">West (Jurong, Boon Lay)</button>
+      </div>
+      <div class="small-note">"Walkable" is judged from wherever you are when you set up a spot — not from a fixed location.</div>
+    </div>
+    <div class="field">
+      <label>Cuisine (optional, tap any that work)</label>
+      <div class="chip-row" id="cuisineChips"></div>
+    </div>
+    <div class="small-note">Filters shape most of the deck — we'll still slip in the occasional wildcard that ignores them, just to keep you both honest.</div>
+  </div>
+
+  <div class="panel hidden" id="managePanel">
+    <h2>Our spots</h2>
+    <div class="field">
+      <label>Paste a Google Maps link (optional)</label>
+      <input type="text" id="mapsLink" placeholder="https://www.google.com/maps/place/...">
+      <button id="btnAutofill" style="margin-top:8px;width:100%;padding:9px;border-radius:8px;border:1px solid rgba(232,169,59,0.4);background:transparent;color:var(--butter);font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;">Autofill from link</button>
+      <div class="small-note" id="autofillStatus"></div>
+    </div>
+    <div class="field row">
+      <input type="text" id="newName" placeholder="Restaurant name">
+    </div>
+    <div class="field row">
+      <input type="text" id="newCuisine" placeholder="Cuisine (e.g. Ramen)">
+    </div>
+    <div class="field row">
+      <select id="newPrice" style="flex:1;padding:9px;border-radius:8px;background:var(--ink);color:var(--paper);border:1px solid rgba(239,227,200,0.25);">
+        <option value="1">$</option>
+        <option value="2">$$</option>
+        <option value="3">$$$</option>
+      </select>
+      <select id="newDist" style="flex:1;padding:9px;border-radius:8px;background:var(--ink);color:var(--paper);border:1px solid rgba(239,227,200,0.25);">
+        <option value="walkable">Walkable</option>
+        <option value="north">North (Yishun, Woodlands)</option>
+        <option value="northeast">North-East (Punggol, Sengkang)</option>
+        <option value="east">East (Tampines, Bedok)</option>
+        <option value="central">Central (Novena, Toa Payoh)</option>
+        <option value="westcentral">West Central (Holland V, one-north)</option>
+        <option value="west">West (Jurong, Boon Lay)</option>
+      </select>
+    </div>
+    <div class="field">
+      <input type="text" id="newNotes" placeholder="Notes (optional — 'get the katsu')">
+    </div>
+    <button class="toolbar-btn" id="btnAddSpot" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--yes);color:var(--paper);font-weight:600;cursor:pointer;">Add to the list</button>
+    <div id="spotList" style="margin-top:14px;"></div>
+  </div>
+
+  <div id="mainArea"></div>
+
+  <div class="link-note">This link is shared between just the two of you — anyone with it can see your list and votes, so keep it private.</div>
+</div>
+
+<div class="overlay hidden" id="setupOverlay">
+  <div class="overlay-box">
+    <h2>First, quick setup</h2>
+    <div class="field"><label>Your name</label><input type="text" id="setupA" placeholder="e.g. Alex"></div>
+    <div class="field"><label>Their name</label><input type="text" id="setupB" placeholder="e.g. Sam"></div>
+    <button class="primary" id="setupSave">Save names</button>
+  </div>
+</div>
+
+<script>
+  // Shared storage backed by the Cloudflare Pages Function at /api/storage (KV-backed).
+  window.storage = {
+    async get(key){
+      const r = await fetch('/api/storage?key=' + encodeURIComponent(key));
+      if(!r.ok) return null;
+      return await r.json();
+    },
+    async set(key, value){
+      const r = await fetch('/api/storage', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key, value})
+      });
+      return r.ok;
+    },
+    async delete(key){
+      const r = await fetch('/api/storage?key=' + encodeURIComponent(key), {method: 'DELETE'});
+      return r.ok;
+    }
+  };
+</script>
+<script>
+(function(){
+  const S = window.storage;
+  async function safeGet(key, shared){ try{ const r = await S.get(key, !!shared); return r ? JSON.parse(r.value) : null; }catch(e){ return null; } }
+  async function safeSet(key, value, shared){ try{ return await S.set(key, JSON.stringify(value), !!shared); }catch(e){ console.error('storage set failed', e); return null; } }
+  async function safeDelete(key, shared){ try{ return await S.delete(key, !!shared); }catch(e){ return null; } }
+
+  let names = null;       // {a, b}
+  let me = null;           // 'a' or 'b'
+  let restaurants = [];    // array
+  let round = null;        // {id, filters, deck:[ids], wildcardIds:[ids]}
+  let myVotes = {};         // {id: bool}
+  let filters = { budget: 3, areas: [], cuisines: [] };
+
+  const AREA_LABELS = {
+    walkable: 'Walkable',
+    north: 'North (Yishun, Woodlands)',
+    northeast: 'North-East (Punggol, Sengkang)',
+    east: 'East (Tampines, Bedok)',
+    central: 'Central (Novena, Toa Payoh)',
+    westcentral: 'West Central (Holland V, one-north)',
+    west: 'West (Jurong, Boon Lay)'
+  };
+  // rough centroids for classifying a lat/lng into one of the areas above
+  const AREA_CENTROIDS = {
+    north: {lat:1.435, lng:103.810},
+    northeast: {lat:1.377, lng:103.887},
+    east: {lat:1.348, lng:103.944},
+    central: {lat:1.328, lng:103.842},
+    westcentral: {lat:1.306, lng:103.790},
+    west: {lat:1.329, lng:103.738}
+  };
+  function areaLabel(key){ return AREA_LABELS[key] || 'Area not set'; }
+  let deckIndex = 0;
+  let pollTimer = null;
+
+  const mainArea = document.getElementById('mainArea');
+  const whoToggle = document.getElementById('whoToggle');
+
+  function uid(){ return Math.random().toString(36).slice(2,9); }
+
+  async function init(){
+    names = await safeGet('names', true);
+    if(!names){
+      document.getElementById('setupOverlay').classList.remove('hidden');
+      document.getElementById('setupSave').onclick = async ()=>{
+        const a = document.getElementById('setupA').value.trim() || 'Player A';
+        const b = document.getElementById('setupB').value.trim() || 'Player B';
+        names = {a,b};
+        await safeSet('names', names, true);
+        document.getElementById('setupOverlay').classList.add('hidden');
+        renderWho();
+      };
+      return;
+    }
+    renderWho();
+    restaurants = (await safeGet('restaurants', true)) || [];
+    round = await safeGet('current_round', true);
+    renderManagePanel();
+    await loadRoundState();
+  }
+
+  function renderWho(){
+    whoToggle.innerHTML = '';
+    ['a','b'].forEach(key=>{
+      const btn = document.createElement('button');
+      btn.textContent = names[key];
+      btn.className = me===key ? 'active' : '';
+      btn.onclick = async ()=>{ me = key; renderWho(); await loadRoundState(); };
+      whoToggle.appendChild(btn);
+    });
+    if(!me){ me = 'a'; renderWho(); }
+  }
+
+  // ---------- filters panel ----------
+  document.getElementById('btnFilters').onclick = ()=>{
+    document.getElementById('filterPanel').classList.toggle('hidden');
+    document.getElementById('managePanel').classList.add('hidden');
+  };
+  document.getElementById('btnManage').onclick = ()=>{
+    document.getElementById('managePanel').classList.toggle('hidden');
+    document.getElementById('filterPanel').classList.add('hidden');
+  };
+
+  function renderCuisineChips(){
+    const wrap = document.getElementById('cuisineChips');
+    const cuisines = [...new Set(restaurants.map(r=>r.cuisine).filter(Boolean))];
+    wrap.innerHTML = '';
+    cuisines.forEach(c=>{
+      const chip = document.createElement('button');
+      chip.className = 'chip' + (filters.cuisines.includes(c) ? ' selected' : '');
+      chip.textContent = c;
+      chip.onclick = ()=>{
+        if(filters.cuisines.includes(c)) filters.cuisines = filters.cuisines.filter(x=>x!==c);
+        else filters.cuisines.push(c);
+        renderCuisineChips();
+      };
+      wrap.appendChild(chip);
+    });
+    if(cuisines.length===0){ wrap.innerHTML = '<span class="small-note">Add some spots first and cuisine tags will show up here.</span>'; }
+  }
+  function wireChipGroup(id, field){
+    document.querySelectorAll('#'+id+' .chip').forEach(chip=>{
+      chip.onclick = ()=>{
+        filters[field] = parseInt(chip.dataset.val,10);
+        document.querySelectorAll('#'+id+' .chip').forEach(c=>c.classList.remove('selected'));
+        chip.classList.add('selected');
+      };
+    });
+  }
+  wireChipGroup('budgetChips','budget');
+
+  function wireAreaChips(){
+    document.querySelectorAll('#areaChips .chip').forEach(chip=>{
+      chip.onclick = ()=>{
+        const val = chip.dataset.val;
+        if(filters.areas.includes(val)) filters.areas = filters.areas.filter(x=>x!==val);
+        else filters.areas.push(val);
+        chip.classList.toggle('selected');
+      };
+    });
+  }
+  wireAreaChips();
+
+  // ---------- manage panel ----------
+  function renderManagePanel(){
+    renderCuisineChips();
+    const list = document.getElementById('spotList');
+    list.innerHTML = '';
+    if(restaurants.length===0){
+      list.innerHTML = '<div class="small-note">No spots yet — add the places you two actually go to (or want to try).</div>';
+      return;
+    }
+    restaurants.forEach(r=>{
+      const row = document.createElement('div');
+      row.className = 'list-item';
+      const priceStr = '$'.repeat(r.price);
+      const distStr = areaLabel(r.distance);
+      row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span></div>`;
+      const del = document.createElement('button');
+      del.textContent = 'Remove';
+      del.onclick = async ()=>{
+        restaurants = restaurants.filter(x=>x.id!==r.id);
+        await safeSet('restaurants', restaurants, true);
+        renderManagePanel();
+      };
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+  function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+  // ---------- Google Maps link autofill ----------
+  function parseMapsUrl(url){
+    let nameGuess = null, lat = null, lng = null;
+    try{
+      const placeMatch = url.match(/\/place\/([^/@]+)/);
+      if(placeMatch) nameGuess = decodeURIComponent(placeMatch[1].replace(/\+/g,' '));
+      const coordMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if(coordMatch){ lat = parseFloat(coordMatch[1]); lng = parseFloat(coordMatch[2]); }
+    }catch(e){}
+    return {nameGuess, lat, lng};
+  }
+
+  function haversineKm(lat1,lon1,lat2,lon2){
+    const R = 6371;
+    const toRad = x => x*Math.PI/180;
+    const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R * 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function getGeolocation(){
+    return new Promise(resolve=>{
+      if(!navigator.geolocation){ resolve(null); return; }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({lat: pos.coords.latitude, lng: pos.coords.longitude}),
+        () => resolve(null),
+        {timeout: 4000}
+      );
+    });
+  }
+
+  // Classifies a lat/lng into 'walkable' (if close to userCoords) or the nearest
+  // of the fixed Singapore area centroids otherwise.
+  function classifyArea(lat, lng, userCoords){
+    let kmFromUser = null;
+    if(userCoords){
+      kmFromUser = haversineKm(userCoords.lat, userCoords.lng, lat, lng);
+      if(kmFromUser < 1.2) return {key: 'walkable', km: kmFromUser};
+    }
+    let best = null, bestDist = Infinity;
+    for(const key in AREA_CENTROIDS){
+      const c = AREA_CENTROIDS[key];
+      const d = haversineKm(lat, lng, c.lat, c.lng);
+      if(d < bestDist){ bestDist = d; best = key; }
+    }
+    return {key: best, km: kmFromUser};
+  }
+
+  async function suggestDistance(lat, lng, statusEl){
+    const userCoords = await getGeolocation();
+    const result = classifyArea(lat, lng, userCoords);
+    if(!result.key) return;
+    document.getElementById('newDist').value = result.key;
+    const note = result.km != null
+      ? ` (~${result.km.toFixed(1)} km away — looks like ${areaLabel(result.key)}, adjust if that's off)`
+      : ` (looks like ${areaLabel(result.key)}, adjust if that's off)`;
+    statusEl.textContent += note;
+  }
+
+  async function lookupMapsLink(){
+    const url = document.getElementById('mapsLink').value.trim();
+    const statusEl = document.getElementById('autofillStatus');
+    const btn = document.getElementById('btnAutofill');
+    if(!url){ statusEl.textContent = 'Paste a Google Maps link first.'; return; }
+    statusEl.textContent = 'Looking that up...';
+    btn.disabled = true;
+    const hints = parseMapsUrl(url);
+    const prompt = `Given this Google Maps link, identify the specific restaurant or place it points to, using web search as needed.
+Link: ${url}
+${hints.nameGuess ? 'Text found in the link suggests the name may be: "' + hints.nameGuess + '".' : ''}
+
+Respond with ONLY a JSON object, no markdown fences, no extra commentary, in exactly this shape:
+{"name": "...", "cuisine": "...", "price": 1, "notes": "..."}
+
+- "price" must be an integer 1, 2, or 3 (1=$, 2=$$, 3=$$$) — your best estimate of the price level.
+- "cuisine" should be a short label (e.g. "Ramen", "Italian", "Cafe").
+- "notes" should be one short line, under 12 words (e.g. a signature dish or the general vibe).
+If you cannot identify the place at all, respond with exactly {"error": "not found"}.`;
+
+    try{
+      const resp = await fetch("/api/anthropic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }],
+          tools: [{ type: "web_search_20250305", name: "web_search" }]
+        })
+      });
+      const data = await resp.json();
+      const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+      let clean = textBlocks.replace(/```json|```/g, '').trim();
+      const jsonMatch = clean.match(/\{[\s\S]*\}/);
+      if(jsonMatch) clean = jsonMatch[0];
+      const parsed = JSON.parse(clean);
+      if(parsed.error){
+        statusEl.textContent = "Couldn't pin that one down — fill it in by hand below.";
+      } else {
+        document.getElementById('newName').value = parsed.name || hints.nameGuess || '';
+        document.getElementById('newCuisine').value = parsed.cuisine || '';
+        if(parsed.price >= 1 && parsed.price <= 3) document.getElementById('newPrice').value = String(parsed.price);
+        document.getElementById('newNotes').value = parsed.notes || '';
+        statusEl.textContent = 'Filled in below — check it over, then add to the list.';
+        if(hints.lat != null && hints.lng != null) suggestDistance(hints.lat, hints.lng, statusEl);
+      }
+    }catch(e){
+      console.error(e);
+      statusEl.textContent = "Couldn't reach the lookup — fill it in by hand below.";
+    }
+    btn.disabled = false;
+  }
+  document.getElementById('btnAutofill').onclick = lookupMapsLink;
+
+  document.getElementById('btnAddSpot').onclick = async ()=>{
+    const name = document.getElementById('newName').value.trim();
+    if(!name) return;
+    const cuisine = document.getElementById('newCuisine').value.trim();
+    const price = parseInt(document.getElementById('newPrice').value,10);
+    const distance = document.getElementById('newDist').value;
+    const notes = document.getElementById('newNotes').value.trim();
+    restaurants.push({id: uid(), name, cuisine, price, distance, notes});
+    await safeSet('restaurants', restaurants, true);
+    document.getElementById('newName').value='';
+    document.getElementById('newCuisine').value='';
+    document.getElementById('newNotes').value='';
+    document.getElementById('mapsLink').value='';
+    document.getElementById('autofillStatus').textContent='';
+    renderManagePanel();
+  };
+
+  // ---------- shuffle / round creation ----------
+  async function fetchExternalWildcards(count, coords, excludeNames, filters){
+    if(count <= 0) return [];
+    const locText = coords
+      ? `near latitude ${coords.lat}, longitude ${coords.lng}, in Singapore`
+      : `in Singapore (exact location unknown — pick well-regarded, broadly findable spots rather than anything hyper-local)`;
+    const cuisineText = filters.cuisines.length
+      ? `The user usually likes: ${filters.cuisines.join(', ')} — but feel free to branch out, since the whole point is a genuine wildcard.`
+      : `No cuisine restriction — pick something interesting and different from what's already on their list.`;
+    const prompt = `Suggest ${count} real, distinct restaurants ${locText}, at a price level of ${filters.budget} (1=$, 2=$$, 3=$$$) or lower, that are NOT any of these already-known spots: ${excludeNames.join(', ') || 'none'}.
+${cuisineText}
+These are "wildcard" picks meant to nudge the user out of their usual defaults — genuinely new-to-them places, not variations of what they already eat.
+
+Respond with ONLY a JSON array, no markdown fences, no extra commentary, in exactly this shape:
+[{"name":"...", "cuisine":"...", "price":1, "lat":1.30, "lng":103.80, "notes":"..."}]
+- "price": integer 1-3 matching the scale above.
+- "lat"/"lng": approximate decimal-degree coordinates of the restaurant, so we can tell which part of Singapore it's in.
+- "notes": one short line, under 12 words.
+If you can't find enough genuine real matches, return fewer items rather than inventing fictitious ones.`;
+
+    try{
+      const resp = await fetch("/api/anthropic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }],
+          tools: [{ type: "web_search_20250305", name: "web_search" }]
+        })
+      });
+      const data = await resp.json();
+      const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+      let clean = textBlocks.replace(/```json|```/g, '').trim();
+      const jsonMatch = clean.match(/\[[\s\S]*\]/);
+      if(jsonMatch) clean = jsonMatch[0];
+      const arr = JSON.parse(clean);
+      const fallbackArea = filters.areas[0] || 'central';
+      return arr.filter(x => x && x.name).map(x => {
+        let distance = fallbackArea;
+        if(typeof x.lat === 'number' && typeof x.lng === 'number'){
+          const classified = classifyArea(x.lat, x.lng, coords);
+          if(classified.key) distance = classified.key;
+        }
+        return {
+          id: 'ext-' + uid(),
+          name: x.name,
+          cuisine: x.cuisine || '',
+          price: (x.price >= 1 && x.price <= 3) ? x.price : filters.budget,
+          distance,
+          notes: x.notes || '',
+          external: true
+        };
+      });
+    }catch(e){
+      console.error('external wildcard fetch failed', e);
+      return [];
+    }
+  }
+
+  document.getElementById('btnShuffle').onclick = async ()=>{
+    if(restaurants.length < 2){
+      alert('Add at least a couple of spots first (tap "Edit spots").');
+      return;
+    }
+    const btn = document.getElementById('btnShuffle');
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Shuffling...';
+
+    let pool = restaurants.filter(r => r.price <= filters.budget &&
+      (filters.areas.length===0 || filters.areas.includes(r.distance)) &&
+      (filters.cuisines.length===0 || filters.cuisines.includes(r.cuisine)));
+    let wildcardPool = restaurants.filter(r => !pool.find(p=>p.id===r.id));
+    if(pool.length===0){ pool = [...restaurants]; wildcardPool = []; }
+    pool = shuffle(pool);
+
+    // Every 4 matching cards gets one wildcard slot, alternating internal (from your
+    // own list, but filtered out) / external (a real find from outside your list).
+    const wildcardSlots = Math.floor(pool.length / 4);
+    const externalSlotsNeeded = Math.floor(wildcardSlots / 2);
+    btn.textContent = 'Scouting a wildcard...';
+    const coords = await getGeolocation();
+    const externalCandidates = await fetchExternalWildcards(externalSlotsNeeded, coords, restaurants.map(r=>r.name), filters);
+
+    const deck = [];
+    const wildcardIds = [];
+    const externalCards = {};
+    let wIdx = 0, exIdx = 0, wildcardCount = 0;
+    pool.forEach((r,i)=>{
+      deck.push(r.id);
+      if((i+1)%4===0){
+        const wantsExternal = wildcardCount % 2 === 1; // slot 0 = internal, slot 1 = external, alternating
+        let card = null;
+        if(wantsExternal && externalCandidates.length){
+          card = externalCandidates[exIdx % externalCandidates.length]; exIdx++;
+        }else if(wildcardPool.length){
+          card = wildcardPool[wIdx % wildcardPool.length]; wIdx++;
+        }else if(externalCandidates.length){
+          card = externalCandidates[exIdx % externalCandidates.length]; exIdx++;
+        }
+        if(card){
+          deck.push(card.id);
+          wildcardIds.push(card.id);
+          if(card.external) externalCards[card.id] = card;
+          wildcardCount++;
+        }
+      }
+    });
+
+    const newRound = { id: uid(), filters: {...filters}, deck, wildcardIds, externalCards, createdAt: Date.now() };
+    // best-effort cleanup of old votes
+    if(round){
+      await safeDelete('votes:'+round.id+':a', true);
+      await safeDelete('votes:'+round.id+':b', true);
+    }
+    round = newRound;
+    await safeSet('current_round', round, true);
+    document.getElementById('filterPanel').classList.add('hidden');
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    await loadRoundState();
+  };
+
+  function shuffle(arr){
+    const a = [...arr];
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  function getCardData(id){
+    return restaurants.find(x=>x.id===id) || (round && round.externalCards && round.externalCards[id]) || null;
+  }
+
+  // ---------- round state / voting ----------
+  async function loadRoundState(){
+    if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+    round = await safeGet('current_round', true);
+    if(!round){
+      renderNoRound();
+      return;
+    }
+    myVotes = (await safeGet('votes:'+round.id+':'+me, true)) || {};
+    deckIndex = round.deck.filter(id => id in myVotes).length;
+    renderRound();
+  }
+
+  function renderNoRound(){
+    mainArea.innerHTML = `<div class="status-block"><p>No round going yet.</p><div class="sub">Set your filters, then tap "Shuffle a new round" to start swiping.</div></div>`;
+  }
+
+  function renderRound(){
+    if(deckIndex >= round.deck.length){
+      renderWaitingOrMatches();
+      return;
+    }
+    const restaurantId = round.deck[deckIndex];
+    const r = getCardData(restaurantId);
+    if(!r){ deckIndex++; renderRound(); return; }
+    const isWildcard = round.wildcardIds.includes(restaurantId);
+    const flagLabel = r.external ? '✦ NEW FIND' : '★ WILDCARD';
+    mainArea.innerHTML = `
+      <div class="progress">Card ${deckIndex+1} of ${round.deck.length}</div>
+      <div class="deck-wrap">
+        <div class="card" id="activeCard">
+          ${isWildcard ? '<div class="wildcard-flag">'+flagLabel+'</div>' : ''}
+          <div class="ticket-no">No. ${String(deckIndex+1).padStart(3,'0')}</div>
+          <h3>${escapeHtml(r.name)}</h3>
+          <div class="tags">
+            <span>${escapeHtml(r.cuisine||'—')}</span>
+            <span>${'$'.repeat(r.price)}</span>
+            <span>${areaLabel(r.distance)}</span>
+          </div>
+          ${r.notes ? '<div class="notes">'+escapeHtml(r.notes)+'</div>' : ''}
+          ${r.external ? '<button id="btnSaveExternal" style="align-self:flex-start;margin-top:8px;background:none;border:1px solid rgba(0,0,0,0.2);border-radius:6px;padding:5px 9px;font-size:11px;font-family:\'IBM Plex Mono\',monospace;cursor:pointer;color:var(--text);">+ Save to our list</button>' : ''}
+          <div class="stamp no" id="stampNo">NO</div>
+          <div class="stamp yes" id="stampYes">YES</div>
+        </div>
+      </div>
+      <div class="swipe-actions">
+        <button class="no" id="btnNo">✕</button>
+        <button class="yes" id="btnYes">✓</button>
+      </div>
+    `;
+    document.getElementById('btnNo').onclick = ()=>vote(restaurantId, false);
+    document.getElementById('btnYes').onclick = ()=>vote(restaurantId, true);
+    if(r.external){
+      document.getElementById('btnSaveExternal').onclick = async (e)=>{
+        e.stopPropagation();
+        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, distance: r.distance, notes: r.notes});
+        await safeSet('restaurants', restaurants, true);
+        const b = document.getElementById('btnSaveExternal');
+        b.textContent = 'Saved ✓'; b.disabled = true;
+      };
+    }
+    wireDrag(restaurantId);
+  }
+
+
+  function wireDrag(restaurantId){
+    const card = document.getElementById('activeCard');
+    if(!card) return;
+    let startX=0, startY=0, dragging=false, dx=0;
+    const stampYes = document.getElementById('stampYes');
+    const stampNo = document.getElementById('stampNo');
+    card.addEventListener('pointerdown', e=>{
+      dragging = true; startX=e.clientX; startY=e.clientY; card.style.transition='none'; card.setPointerCapture(e.pointerId);
+    });
+    card.addEventListener('pointermove', e=>{
+      if(!dragging) return;
+      dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      card.style.transform = `translate(${dx}px, ${dy*0.2}px) rotate(${dx/18}deg)`;
+      if(dx>30){ stampYes.classList.add('show'); stampNo.classList.remove('show'); }
+      else if(dx<-30){ stampNo.classList.add('show'); stampYes.classList.remove('show'); }
+      else { stampYes.classList.remove('show'); stampNo.classList.remove('show'); }
+    });
+    function endDrag(){
+      if(!dragging) return;
+      dragging = false;
+      card.style.transition = 'transform .2s ease';
+      if(dx > 90){ card.style.transform = `translate(600px, -40px) rotate(20deg)`; setTimeout(()=>vote(restaurantId,true), 150); }
+      else if(dx < -90){ card.style.transform = `translate(-600px, -40px) rotate(-20deg)`; setTimeout(()=>vote(restaurantId,false), 150); }
+      else { card.style.transform = 'translate(0,0) rotate(0)'; stampYes.classList.remove('show'); stampNo.classList.remove('show'); }
+      dx = 0;
+    }
+    card.addEventListener('pointerup', endDrag);
+    card.addEventListener('pointercancel', endDrag);
+  }
+
+  async function vote(restaurantId, yes){
+    myVotes[restaurantId] = yes;
+    await safeSet('votes:'+round.id+':'+me, myVotes, true);
+    deckIndex++;
+    renderRound();
+  }
+
+  async function renderWaitingOrMatches(){
+    const otherKey = me==='a' ? 'b' : 'a';
+    const otherVotes = (await safeGet('votes:'+round.id+':'+otherKey, true)) || {};
+    const otherDone = round.deck.filter(id=>id in otherVotes).length >= round.deck.length;
+    if(!otherDone){
+      mainArea.innerHTML = `<div class="status-block"><div class="spinner"></div><p>Waiting on ${names[otherKey]}...</p><div class="sub">Checking back every few seconds.</div></div>`;
+      if(!pollTimer){
+        pollTimer = setInterval(async ()=>{
+          const ov = (await safeGet('votes:'+round.id+':'+otherKey, true)) || {};
+          const done = round.deck.filter(id=>id in ov).length >= round.deck.length;
+          if(done){ clearInterval(pollTimer); pollTimer=null; renderWaitingOrMatches(); }
+        }, 3000);
+      }
+      return;
+    }
+    if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+    const matchIds = round.deck.filter(id => myVotes[id]===true && otherVotes[id]===true);
+    const uniqueMatches = [...new Set(matchIds)];
+    if(uniqueMatches.length===0){
+      mainArea.innerHTML = `<div class="status-block"><p>No overlap this round 😅</p><div class="sub">Try widening a filter, or just shuffle again — the wildcard might land better next time.</div></div>`;
+      return;
+    }
+    const pickId = uniqueMatches[Math.floor(Math.random()*uniqueMatches.length)];
+    renderMatches(uniqueMatches, pickId);
+  }
+
+  function renderMatches(matchIds, pickId){
+    let html = `<div class="status-block" style="padding-top:10px;"><p style="font-family:'Special Elite',monospace;font-size:20px;">You both said yes to ${matchIds.length} spot${matchIds.length>1?'s':''}</p></div>`;
+    matchIds.forEach(id=>{
+      const r = getCardData(id);
+      if(!r) return;
+      const isPick = id===pickId;
+      html += `<div class="match-card ${isPick?'pick':''}">
+        ${isPick ? '<div class="badge">TONIGHT\'S PICK</div>' : (r.external ? '<div class="badge">✦ NEW FIND</div>' : '')}
+        <h3>${escapeHtml(r.name)}</h3>
+        <div class="tags"><span>${escapeHtml(r.cuisine||'—')}</span><span>${'$'.repeat(r.price)}</span><span>${areaLabel(r.distance)}</span></div>
+      </div>`;
+    });
+    if(matchIds.length>1){
+      html += `<button id="reroll" style="width:100%;padding:11px;border-radius:9px;border:none;background:var(--butter);color:var(--ink);font-weight:700;cursor:pointer;margin-top:4px;">Re-roll among matches</button>`;
+    }
+    mainArea.innerHTML = html;
+    if(matchIds.length>1){
+      document.getElementById('reroll').onclick = ()=>{
+        const newPick = matchIds[Math.floor(Math.random()*matchIds.length)];
+        renderMatches(matchIds, newPick);
+      };
+    }
+  }
+
+
+  init();
+})();
+</script>
+</body>
+</html>
