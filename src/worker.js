@@ -48,6 +48,13 @@ async function handleStorage(request, env) {
 async function handleAnthropic(request, env) {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
 
+  // Kill switch: when AI_ASSIST_ENABLED is set to "false" (dashboard var,
+  // not in wrangler.jsonc so it can be flipped without a redeploy), return
+  // immediately with no outbound call to Anthropic at all — zero cost.
+  if (env.AI_ASSIST_ENABLED === "false") {
+    return json({ content: [] });
+  }
+
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const hourBucket = new Date().toISOString().slice(0, 13); // e.g. 2026-07-31T14
   const rateKey = `ratelimit:${ip}:${hourBucket}`;
