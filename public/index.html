@@ -20,7 +20,7 @@
     --paper-shadow: rgba(0,0,0,0.35);
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:var(--ink);color:var(--paper);font-family:'Inter',sans-serif;min-height:100%;}
+  html,body{margin:0;padding:0;background:var(--ink);color:var(--paper);font-family:'Inter',sans-serif;min-height:100%;transition:background-color .2s ease, color .2s ease;}
   body{
     background-image:
       radial-gradient(circle at 20% 10%, rgba(232,169,59,0.06), transparent 40%),
@@ -38,6 +38,14 @@
     border:1px solid rgba(239,227,200,0.25);background:transparent;color:var(--paper);cursor:pointer;
   }
   .who button.active{background:var(--butter);color:var(--ink);border-color:var(--butter);font-weight:600;}
+
+  .palette-row{display:flex;align-items:center;gap:7px;margin-top:10px;flex-wrap:wrap;}
+  .palette-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;color:var(--muted);text-transform:uppercase;}
+  .swatch{
+    width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;
+    box-shadow:0 1px 3px rgba(0,0,0,0.35);
+  }
+  .swatch.selected{border-color:var(--paper);}
 
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 14px;}
   .toolbar button{
@@ -162,6 +170,8 @@
     </div>
     <div class="who" id="whoToggle"></div>
   </header>
+
+  <div class="palette-row" id="paletteRow"></div>
 
   <div class="toolbar">
     <button id="btnFilters">Set filters</button>
@@ -291,6 +301,48 @@
   let myVotes = {};         // {id: bool}
   let filters = { budget: 3, areas: [], cuisines: [] };
   let aiAssistEnabled = false; // shared toggle for Maps autofill + wildcard suggestions (costs API $, off by default)
+  let palettes = { a: 'forest', b: 'forest' }; // each person's own colour scheme, applied only while their tab is active
+
+  const PALETTE_ORDER = ['forest','midnight','rosewood','teal','mono'];
+  const PALETTES = {
+    forest:   { name:'Forest',   ink:'#16231F', ink2:'#1D2E28', paper:'#EFE3C8', paper2:'#E7D9B8', accent:'#E8A93B', yes:'#3F7D5C', no:'#C1443B', text:'#201C14', muted:'#8A8370', shadow:'rgba(0,0,0,0.35)' },
+    midnight: { name:'Midnight', ink:'#171833', ink2:'#20244A', paper:'#ECE7F7', paper2:'#DFD8F0', accent:'#9B7FF0', yes:'#3F7D5C', no:'#C1443B', text:'#211D3A', muted:'#8480A3', shadow:'rgba(10,5,40,0.4)' },
+    rosewood: { name:'Rosewood', ink:'#2B1418', ink2:'#3A1C22', paper:'#F5E4DE', paper2:'#EED4CC', accent:'#D97757', yes:'#3F7D5C', no:'#B23A46', text:'#2E1A16', muted:'#A2857E', shadow:'rgba(30,5,10,0.4)' },
+    teal:     { name:'Deep Teal',ink:'#0F2320', ink2:'#163330', paper:'#EFE9D8', paper2:'#E3DBC2', accent:'#4FB6A8', yes:'#5C9C4A', no:'#C1443B', text:'#16241F', muted:'#839084', shadow:'rgba(0,15,15,0.4)' },
+    mono:     { name:'Charcoal', ink:'#1C1C1C', ink2:'#262626', paper:'#EDEAE3', paper2:'#E0DCD2', accent:'#C9A227', yes:'#4A7A55', no:'#B04A42', text:'#1E1E1E', muted:'#8C8C8C', shadow:'rgba(0,0,0,0.45)' }
+  };
+  function applyPalette(){
+    const p = PALETTES[palettes[me]] || PALETTES.forest;
+    const s = document.documentElement.style;
+    s.setProperty('--ink', p.ink);
+    s.setProperty('--ink-2', p.ink2);
+    s.setProperty('--paper', p.paper);
+    s.setProperty('--paper-2', p.paper2);
+    s.setProperty('--butter', p.accent);
+    s.setProperty('--yes', p.yes);
+    s.setProperty('--no', p.no);
+    s.setProperty('--text', p.text);
+    s.setProperty('--muted', p.muted);
+    s.setProperty('--paper-shadow', p.shadow);
+  }
+  function renderPaletteRow(){
+    const wrap = document.getElementById('paletteRow');
+    wrap.innerHTML = '<span class="palette-label">My colours</span>';
+    PALETTE_ORDER.forEach(key=>{
+      const p = PALETTES[key];
+      const btn = document.createElement('button');
+      btn.className = 'swatch' + (palettes[me]===key ? ' selected' : '');
+      btn.style.background = `linear-gradient(135deg, ${p.ink2} 50%, ${p.accent} 50%)`;
+      btn.title = p.name;
+      btn.onclick = async ()=>{
+        palettes[me] = key;
+        await safeSet('palette_'+me, key, true);
+        applyPalette();
+        renderPaletteRow();
+      };
+      wrap.appendChild(btn);
+    });
+  }
 
   const AREA_LABELS = {
     walkable: 'Walkable',
@@ -330,10 +382,16 @@
         await safeSet('names', names, true);
         document.getElementById('setupOverlay').classList.add('hidden');
         renderWho();
+        applyPalette();
+        renderPaletteRow();
       };
       return;
     }
     renderWho();
+    palettes.a = (await safeGet('palette_a', true)) || 'forest';
+    palettes.b = (await safeGet('palette_b', true)) || 'forest';
+    applyPalette();
+    renderPaletteRow();
     restaurants = (await safeGet('restaurants', true)) || [];
     round = await safeGet('current_round', true);
     aiAssistEnabled = !!(await safeGet('ai_assist_enabled', true));
@@ -361,7 +419,7 @@
       const btn = document.createElement('button');
       btn.textContent = names[key];
       btn.className = me===key ? 'active' : '';
-      btn.onclick = async ()=>{ me = key; renderWho(); await loadRoundState(); };
+      btn.onclick = async ()=>{ me = key; renderWho(); applyPalette(); renderPaletteRow(); await loadRoundState(); };
       whoToggle.appendChild(btn);
     });
     if(!me){ me = 'a'; renderWho(); }
