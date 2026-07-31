@@ -1,0 +1,15 @@
+{
+  "name": "etoitte",
+  "compatibility_date": "2026-07-31",
+  "main": "src/worker.js",
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "ETOITTE_KV",
+      "id": "55b9e059b6e0498c9ea74f4c3b8b1251"
+    }
+  ]
+}

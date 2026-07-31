@@ -1,39 +1,25 @@
 # Deploying Etoitte to Cloudflare (free)
 
-This folder is set up for Cloudflare Pages:
+This is a Cloudflare Worker with static assets (the current unified Workers product — the older, separate "Pages" product with its `functions/` folder convention doesn't apply here):
 - `public/index.html` — the app, using `/api/storage` for shared state and `/api/anthropic` for the AI-assist features.
-- `functions/api/storage.js` — KV-backed shared storage.
-- `functions/api/anthropic.js` — proxies AI calls, holds your API key server-side, rate-limited to 20 requests/hour per IP.
+- `src/worker.js` — handles both API routes and falls through to serving `public/` for everything else.
+- `wrangler.jsonc` — declares the Worker entry point, the static assets directory, and the KV binding (`ETOITTE_KV`).
 
 No auth is built in — anyone with the deployed URL can read/write your list and votes, same as the app's original "keep this link private" design. Don't post the URL publicly.
 
-## 1. Create accounts (free, no card required for Cloudflare)
-- Cloudflare: https://dash.cloudflare.com/sign-up
-- GitHub (if you don't have one): https://github.com/join
-- Anthropic API key (only needed if you want the AI-assist features working): https://console.anthropic.com/settings/keys — note this is billed separately per API call on your account, outside Cloudflare's free tier.
+## 1. Accounts (already done)
+- Cloudflare account, GitHub account, repo at `Zelphie/Etoitte`, connected as a Cloudflare "Workers & Pages" application named `etoitte`.
+- KV namespace `etoitte-kv` created, ID wired into `wrangler.jsonc`.
 
-## 2. Push this folder to a new GitHub repo
-Ask me to do this part with you — I'll stage and commit, but you should create the empty repo on GitHub first and confirm before I push anything.
+## 2. Push and redeploy
+Any commit pushed to `main` auto-redeploys via the connected Git integration — no CLI tooling needed locally. Deploy command is `npx wrangler deploy`, which Cloudflare runs for you in its own build environment.
 
-## 3. Create the KV namespace
-In the Cloudflare dashboard: **Workers & Pages → KV → Create a namespace**, name it `etoitte-kv`.
+## 3. Set the Anthropic API key secret
+Only needed if you want the Maps-link autofill / wildcard-suggestion features working (skip this and they just fail gracefully to manual entry):
+1. console.anthropic.com → **Settings → API Keys** → create a key (billed separately per call on your own account)
+2. Cloudflare dashboard → your `etoitte` Worker → **Settings → Variables and Secrets** → **Add**
+3. Name: `ANTHROPIC_API_KEY`, paste the key, tick **Encrypt**, save
+4. This only works once the Worker has real code attached (not asset-only) — confirmed once `wrangler.jsonc` + `src/worker.js` are deployed.
 
-## 4. Create the Pages project
-**Workers & Pages → Create → Pages → Connect to Git**, pick the repo you pushed. Build settings:
-- Build command: *(leave blank)*
-- Build output directory: `public`
-
-Deploy. Cloudflare will auto-detect `functions/` and wire up the API routes.
-
-## 5. Bind KV and set the API key
-On the new Pages project: **Settings → Functions → KV namespace bindings** → add binding, variable name `ETOITTE_KV`, pick the `etoitte-kv` namespace.
-
-Then **Settings → Environment variables** → add a **secret** named `ANTHROPIC_API_KEY` with your key from step 1. (Skip this if you chose not to wire up the AI-assist features — those calls will just fail gracefully and fall back to manual entry.)
-
-Redeploy once (Deployments tab → Retry deployment) so the new bindings take effect.
-
-## 6. Test
-Visit the `*.pages.dev` URL Cloudflare gives you. Do the setup screen, add a couple of spots, shuffle, and swipe from two browser tabs (or two devices) to confirm shared storage works.
-
-## Ongoing updates
-Any future edit to files in this folder + `git push` auto-redeploys — no CLI tooling needed locally.
+## 4. Test
+Visit the `*.workers.dev` URL (or custom domain) Cloudflare gives you. Do the setup screen, add a couple of spots, shuffle, and swipe from two browser tabs (or two devices) to confirm shared storage works. Try the Maps-link autofill to confirm the API key secret is wired up correctly.
