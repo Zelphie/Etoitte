@@ -68,7 +68,11 @@
   }
   .chip.selected{background:var(--yes);border-color:var(--yes);color:var(--paper);font-weight:600;}
   .region-section{margin:10px 0 4px;}
-  .region-chip{font-weight:600;margin-bottom:6px;}
+  .region-section > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;margin-bottom:6px;}
+  .region-section > summary::-webkit-details-marker{display:none;}
+  .region-section > summary::before{content:'▸';display:inline-block;color:var(--muted);font-size:10px;transition:transform .15s ease;}
+  .region-section[open] > summary::before{transform:rotate(90deg);}
+  .region-chip{font-weight:600;}
   .region-chip.region-full{background:var(--yes);border-color:var(--yes);color:var(--paper);}
   .region-chip.region-partial{background:rgba(232,169,59,0.25);border-color:var(--butter);color:var(--paper);}
   .region-children{margin-left:2px;padding-left:10px;border-left:2px solid rgba(239,227,200,0.15);}
@@ -724,6 +728,15 @@
   // so it can't drift out of sync, and a neighborhood that belongs to more than one region (e.g.
   // bukittimah, in both 'central' and 'west') just gets counted independently by each region's
   // own derivation — no special-casing needed for the overlap.
+  // Manual expand/collapse overrides for the region accordions, keyed by container id then
+  // region key. The picker rebuilds from scratch on every change, so without this a manual
+  // toggle would just get overwritten by the "open if this region has a selection" default on
+  // the very next click anywhere in the picker — including collapsing a region you just
+  // finished fully selecting. An explicit override always wins over the derived default, until
+  // the user explicitly toggles that region again; it's harmless ephemeral UI state, not app
+  // data, so it's never persisted or reset (switching between people, panels, etc. leaves it be).
+  const regionOpenOverrides = { areaChips: {}, newAreaChips: {} };
+
   function renderAreaSelector(containerId, getSelected, applyChange){
     const wrap = document.getElementById(containerId);
     if(!wrap) return;
@@ -748,20 +761,44 @@
       const selectedCount = children.filter(k=>selected.includes(k)).length;
       const state = selectedCount===0 ? 'empty' : (selectedCount===children.length ? 'full' : 'partial');
 
-      const section = document.createElement('div');
+      // <details> gives the fold/expand behavior natively. Open state: an explicit manual
+      // override wins if one's been recorded for this region; otherwise it defaults to "open if
+      // this region has any selection" — same "derive from `selected`" approach as the tri-state
+      // chip itself.
+      const overrides = regionOpenOverrides[containerId];
+      const isOpen = (regionKey in overrides) ? overrides[regionKey] : state !== 'empty';
+
+      const section = document.createElement('details');
       section.className = 'region-section';
+      section.open = isOpen;
+
+      const summary = document.createElement('summary');
+      summary.onclick = ()=>{
+        // Fires on genuine user clicks on the disclosure area (caret/label). Clicks on the
+        // region chip itself never reach here — its own handler calls stopPropagation — so this
+        // only records real "expand/collapse this region" intent, never a selection change.
+        // Predicts the native toggle about to happen rather than reading it after the fact,
+        // since the browser applies its default action (flipping `.open`) after listeners run.
+        overrides[regionKey] = !section.open;
+      };
 
       const regionChip = document.createElement('button');
       regionChip.type = 'button';
       regionChip.className = 'chip region-chip region-' + state;
       regionChip.textContent = (REGION_LABELS[regionKey] || regionKey) + (state==='partial' ? ` (${selectedCount}/${children.length})` : '');
-      regionChip.onclick = ()=>{
+      regionChip.onclick = (e)=>{
+        // Without this, clicking the chip would also toggle the <details> open/closed, since a
+        // click anywhere inside <summary> triggers that by default — this button click should
+        // only ever change the selection.
+        e.preventDefault();
+        e.stopPropagation();
         const next = state==='full'
           ? selected.filter(k=>!children.includes(k))        // full -> deselect exactly this region's children
           : Array.from(new Set([...selected, ...children])); // empty/partial -> select all of this region's children
         applyChange(next);
       };
-      section.appendChild(regionChip);
+      summary.appendChild(regionChip);
+      section.appendChild(summary);
 
       const childRow = document.createElement('div');
       childRow.className = 'chip-row region-children';
