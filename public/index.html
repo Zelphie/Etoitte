@@ -417,11 +417,14 @@
   };
   const DEFAULT_WALKABLE_RADIUS_KM = 1.2;
   // General-region layer above the neighborhoods, purely a UI grouping/shorthand — never
-  // stored in filters.areas or a restaurant's areas (see renderAreaSelector). A neighborhood
-  // can belong to more than one region (bukittimah spans Central and West); the arrays are
-  // plain lists and are not expected to be disjoint.
+  // stored in filters.areas or a restaurant's areas (see renderAreaSelector). The arrays are
+  // plain lists; nothing stops a neighborhood from appearing in more than one, but bukittimah
+  // (previously in both central and west) was pulled back to west-only — selecting it (directly
+  // or via a region's select-all) was rippling into the *other* region's tri-state display too,
+  // which read as a bug rather than the intended shortcut. It's still reachable as its own chip
+  // either way; the only loss is a shortcut hop via Central's select-all.
   const DEFAULT_REGIONS = {
-    central: ['downtown','chinatown','orchard','newton','novena','toapayoh','tiongbahru','queenstown','hollandv','onenorth','bukittimah'],
+    central: ['downtown','chinatown','orchard','newton','novena','toapayoh','tiongbahru','queenstown','hollandv','onenorth'],
     east: ['katong','eastcoast','tampines','bedok'],
     northeast: ['serangoon','hougang','punggol','sengkang'],
     north: ['yishun','woodlands','thomson','sembawang'],
@@ -429,17 +432,16 @@
   };
   const DEFAULT_REGION_LABELS = { central: 'Central', east: 'East', northeast: 'North-East', north: 'North', west: 'West' };
 
-  // Bump whenever DEFAULT_AREA_LABELS/CENTROIDS/REGIONS/REGION_LABELS gain, lose, or rename a
-  // key. A stored config whose own configVersion is behind this gets those four keyed maps
-  // fully resynced from the current defaults on next load (see loadAreaConfig): new keys get
-  // added, keys the running code no longer defines get dropped, and text for keys that changed
-  // gets refreshed. Below this gate, "the KV blob already has a labels object" used to be
-  // treated as "nothing to do here" even when that object's *content* was stale by a version or
-  // two — that's what caused new neighborhoods (bukittimah, thomson, jurongeast, ...) to render
-  // with no label, the retired 'jurong' key to keep rendering as a stray ungrouped chip, and
-  // clementi's label to keep showing its old pre-split text, after this went live with a KV
-  // store that already had a round-1-shaped labels/centroids blob in it.
-  const AREA_CONFIG_VERSION = 1;
+  // Bump whenever DEFAULT_AREA_LABELS/CENTROIDS/REGIONS/REGION_LABELS gain, lose, rename, or
+  // reassign a key's region. A stored config whose own configVersion is behind this gets those
+  // four keyed maps fully resynced from the current defaults on next load (see loadAreaConfig):
+  // new keys get added, keys the running code no longer defines get dropped, and content for
+  // keys that changed gets refreshed. Below this gate, "the KV blob already has a labels object"
+  // used to be treated as "nothing to do here" even when that object's *content* was stale by a
+  // version or two — that's what caused new neighborhoods to render with no label after the
+  // region layer first went live, and is also what makes pulling bukittimah out of `central`
+  // here actually take effect on a store that already has it listed in both.
+  const AREA_CONFIG_VERSION = 2;
 
   // Current area config — replaced wholesale by loadAreaConfig() once /api/areas resolves.
   let AREA_LABELS = DEFAULT_AREA_LABELS;
@@ -549,9 +551,9 @@
     return (keys && keys.length) ? keys.map(areaLabel).join(', ') : 'Area not set';
   }
   // Deduped set of every neighborhood key that appears in at least one region — a Set, so a
-  // multi-region key like bukittimah (in both 'central' and 'west') is only counted once. Used
-  // to find any current AREA_LABELS key that isn't assigned to a region (normally none, besides
-  // 'walkable' which is deliberately unassigned).
+  // key assigned to more than one region (nothing currently is, but the data shape allows it)
+  // would only be counted once. Used to find any current AREA_LABELS key that isn't assigned to
+  // a region (normally none, besides 'walkable' which is deliberately unassigned).
   function allRegionedKeys(){
     return new Set(Object.values(REGIONS).flat());
   }
@@ -725,9 +727,12 @@
   // Region chips are a pure UI shorthand — clicking one is exactly "add/remove this region's
   // own child list" and nothing else; it never inspects any other region's state. A region's
   // empty/partial/full display is derived fresh from `selected` on every render, never stored,
-  // so it can't drift out of sync, and a neighborhood that belongs to more than one region (e.g.
-  // bukittimah, in both 'central' and 'west') just gets counted independently by each region's
-  // own derivation — no special-casing needed for the overlap.
+  // so it can't drift out of sync. A neighborhood assigned to more than one region would get
+  // counted independently by each region's own derivation with no special-casing needed — but in
+  // practice every neighborhood is currently in exactly one region, on purpose: multi-membership
+  // (bukittimah briefly spanned central and west) meant selecting it rippled into a region's
+  // tri-state display you never touched, which read as a bug rather than a shortcut.
+  //
   // Manual expand/collapse overrides for the region accordions, keyed by container id then
   // region key. The picker rebuilds from scratch on every change, so without this a manual
   // toggle would just get overwritten by the "open if this region has a selection" default on
