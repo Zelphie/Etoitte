@@ -193,20 +193,7 @@
     </div>
     <div class="field">
       <label>Areas that work (tap any — none selected means anywhere)</label>
-      <div class="chip-row" id="areaChips">
-        <button class="chip" data-val="walkable">Walkable</button>
-        <button class="chip" data-val="city">City, Chinatown &amp; CBD</button>
-        <button class="chip" data-val="orchard">Orchard &amp; Newton</button>
-        <button class="chip" data-val="novena">Novena &amp; Toa Payoh</button>
-        <button class="chip" data-val="tiongbahru">Tiong Bahru &amp; Queenstown</button>
-        <button class="chip" data-val="hollandv">Holland V &amp; one-north</button>
-        <button class="chip" data-val="katong">Katong &amp; East Coast</button>
-        <button class="chip" data-val="east">Tampines &amp; Bedok</button>
-        <button class="chip" data-val="serangoon">Serangoon &amp; Hougang</button>
-        <button class="chip" data-val="punggol">Punggol &amp; Sengkang</button>
-        <button class="chip" data-val="north">Yishun &amp; Woodlands</button>
-        <button class="chip" data-val="west">Jurong &amp; the West</button>
-      </div>
+      <div class="chip-row" id="areaChips"></div>
       <div class="small-note">"Walkable" is judged from wherever you are when you set up a spot — not from a fixed location.</div>
     </div>
     <div class="field">
@@ -237,20 +224,10 @@
         <option value="2">$$</option>
         <option value="3">$$$</option>
       </select>
-      <select id="newDist" style="flex:1;padding:9px;border-radius:8px;background:var(--ink);color:var(--paper);border:1px solid rgba(239,227,200,0.25);">
-        <option value="walkable">Walkable</option>
-        <option value="city">City, Chinatown & CBD</option>
-        <option value="orchard">Orchard & Newton</option>
-        <option value="novena">Novena & Toa Payoh</option>
-        <option value="tiongbahru">Tiong Bahru & Queenstown</option>
-        <option value="hollandv">Holland V & one-north</option>
-        <option value="katong">Katong & East Coast</option>
-        <option value="east">Tampines & Bedok</option>
-        <option value="serangoon">Serangoon & Hougang</option>
-        <option value="punggol">Punggol & Sengkang</option>
-        <option value="north">Yishun & Woodlands</option>
-        <option value="west">Jurong & the West</option>
-      </select>
+    </div>
+    <div class="field">
+      <label>Areas (tap any that apply)</label>
+      <div class="chip-row" id="newAreaChips"></div>
     </div>
     <div class="field">
       <input type="text" id="newAddress" placeholder="Exact address (optional, for future features)">
@@ -358,38 +335,132 @@
     });
   }
 
-  const AREA_LABELS = {
+  // Built-in seed values for the area config — used until /api/areas returns something from
+  // KV, and written back to KV the first time it comes back empty (see loadAreaConfig).
+  const DEFAULT_AREA_LABELS = {
     walkable: 'Walkable',
-    city: 'City, Chinatown & CBD',
-    orchard: 'Orchard & Newton',
-    novena: 'Novena & Toa Payoh',
-    tiongbahru: 'Tiong Bahru & Queenstown',
-    hollandv: 'Holland V & one-north',
-    katong: 'Katong & East Coast',
-    east: 'Tampines & Bedok',
-    serangoon: 'Serangoon & Hougang',
-    punggol: 'Punggol & Sengkang',
-    north: 'Yishun & Woodlands',
-    west: 'Jurong & the West'
+    downtown: 'Downtown Core, Marina Bay & CBD',
+    chinatown: 'Chinatown & Outram',
+    orchard: 'Orchard',
+    newton: 'Newton',
+    novena: 'Novena',
+    toapayoh: 'Toa Payoh',
+    tiongbahru: 'Tiong Bahru',
+    queenstown: 'Queenstown',
+    hollandv: 'Holland Village',
+    onenorth: 'one-north',
+    katong: 'Katong & Joo Chiat',
+    eastcoast: 'East Coast',
+    tampines: 'Tampines',
+    bedok: 'Bedok',
+    serangoon: 'Serangoon',
+    hougang: 'Hougang',
+    punggol: 'Punggol',
+    sengkang: 'Sengkang',
+    yishun: 'Yishun',
+    woodlands: 'Woodlands',
+    jurong: 'Jurong',
+    clementi: 'Clementi & West Coast'
   };
-  // rough centroids (real planning-area coordinates) for classifying a lat/lng into one of the areas above
-  const AREA_CENTROIDS = {
-    city: {lat:1.283, lng:103.848},
-    orchard: {lat:1.308, lng:103.835},
-    novena: {lat:1.335, lng:103.850},
-    tiongbahru: {lat:1.289, lng:103.816},
-    hollandv: {lat:1.305, lng:103.792},
-    katong: {lat:1.308, lng:103.895},
-    east: {lat:1.337, lng:103.942},
-    serangoon: {lat:1.365, lng:103.868},
-    punggol: {lat:1.396, lng:103.897},
-    north: {lat:1.439, lng:103.815},
-    west: {lat:1.347, lng:103.746}
+  // rough centroids (planning-area-ish coordinates) for classifying a lat/lng into one of the
+  // neighborhoods above. No entry for 'walkable' — that's relative to the user, not a fixed spot.
+  const DEFAULT_AREA_CENTROIDS = {
+    downtown: {lat:1.283, lng:103.851},
+    chinatown: {lat:1.2838, lng:103.8435},
+    orchard: {lat:1.3048, lng:103.8318},
+    newton: {lat:1.3138, lng:103.8382},
+    novena: {lat:1.3203, lng:103.8437},
+    toapayoh: {lat:1.3325, lng:103.8474},
+    tiongbahru: {lat:1.2860, lng:103.8268},
+    queenstown: {lat:1.2942, lng:103.8058},
+    hollandv: {lat:1.3113, lng:103.7963},
+    onenorth: {lat:1.2994, lng:103.7876},
+    katong: {lat:1.3048, lng:103.9033},
+    eastcoast: {lat:1.3010, lng:103.9125},
+    tampines: {lat:1.3524, lng:103.9447},
+    bedok: {lat:1.3240, lng:103.9300},
+    serangoon: {lat:1.3554, lng:103.8737},
+    hougang: {lat:1.3712, lng:103.8926},
+    punggol: {lat:1.4041, lng:103.9025},
+    sengkang: {lat:1.3868, lng:103.8952},
+    yishun: {lat:1.4295, lng:103.8353},
+    woodlands: {lat:1.4360, lng:103.7865},
+    jurong: {lat:1.3329, lng:103.7436},
+    clementi: {lat:1.3151, lng:103.7649}
   };
-  // maps area keys used before the area-accuracy refresh to their current replacement
+  const DEFAULT_WALKABLE_RADIUS_KM = 1.2;
+
+  // Current area config — replaced wholesale by loadAreaConfig() once /api/areas resolves.
+  let AREA_LABELS = DEFAULT_AREA_LABELS;
+  let AREA_CENTROIDS = DEFAULT_AREA_CENTROIDS;
+  let WALKABLE_RADIUS_KM = DEFAULT_WALKABLE_RADIUS_KM;
+
+  // Areas used to be edited by shipping new source — now they're KV-backed config (see
+  // src/worker.js's /api/areas) so they can be tweaked without a redeploy. Falls back to,
+  // and seeds KV with, the built-in defaults above the first time the app runs.
+  async function loadAreaConfig(){
+    try{
+      const resp = await fetch('/api/areas');
+      if(resp.ok){
+        const data = await resp.json();
+        if(data && data.labels && data.centroids){
+          AREA_LABELS = data.labels;
+          AREA_CENTROIDS = data.centroids;
+          WALKABLE_RADIUS_KM = typeof data.walkableRadiusKm === 'number' ? data.walkableRadiusKm : DEFAULT_WALKABLE_RADIUS_KM;
+          return;
+        }
+      }
+    }catch(e){
+      console.error('area config load failed, using built-in defaults', e);
+    }
+    AREA_LABELS = DEFAULT_AREA_LABELS;
+    AREA_CENTROIDS = DEFAULT_AREA_CENTROIDS;
+    WALKABLE_RADIUS_KM = DEFAULT_WALKABLE_RADIUS_KM;
+    try{
+      await fetch('/api/areas', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({labels: AREA_LABELS, centroids: AREA_CENTROIDS, walkableRadiusKm: WALKABLE_RADIUS_KM})
+      });
+    }catch(e){ /* best-effort seed — the app runs fine from the built-in defaults either way */ }
+  }
+
+  // Legacy pre-precinct-refresh keys -> the combined-precinct key that replaced them. Kept only
+  // to migrate very old stored data; not part of the current, KV-editable area set.
   const AREA_KEY_MIGRATION = { northeast: 'punggol', central: 'novena', westcentral: 'hollandv' };
+  // Combined-precinct keys (pre neighborhood-split) -> the individual neighborhood keys that
+  // replaced them. Old data can't tell us which specific neighborhood a spot was actually in,
+  // so it migrates to both — multi-area support means this only widens matching, never loses it.
+  const AREA_SPLIT_MIGRATION = {
+    city: ['downtown','chinatown'],
+    orchard: ['orchard','newton'],
+    novena: ['novena','toapayoh'],
+    tiongbahru: ['tiongbahru','queenstown'],
+    hollandv: ['hollandv','onenorth'],
+    katong: ['katong','eastcoast'],
+    east: ['tampines','bedok'],
+    serangoon: ['serangoon','hougang'],
+    punggol: ['punggol','sengkang'],
+    north: ['yishun','woodlands'],
+    west: ['jurong','clementi']
+  };
   function migrateAreaKey(key){ return AREA_KEY_MIGRATION[key] || key; }
-  function areaLabel(key){ return AREA_LABELS[migrateAreaKey(key)] || 'Area not set'; }
+  function expandAreaKey(key){
+    const renamed = migrateAreaKey(key);
+    return AREA_SPLIT_MIGRATION[renamed] || [renamed];
+  }
+  // Normalizes a stored area value — which may be an old single-string key (the legacy
+  // `distance` field), an old combined-precinct key, or an already-migrated array — into a
+  // deduped array of current area keys. Safe to call repeatedly (idempotent).
+  function migrateAreaKeys(value){
+    const list = Array.isArray(value) ? value : (value ? [value] : []);
+    return Array.from(new Set(list.flatMap(expandAreaKey)));
+  }
+  function areaLabel(key){ return AREA_LABELS[key] || 'Area not set'; }
+  function areaLabelsText(keys){
+    return (keys && keys.length) ? keys.map(areaLabel).join(', ') : 'Area not set';
+  }
+  let newSpotAreas = []; // areas picked (chip multi-select) for the spot currently being added
   let deckIndex = 0;
   let pollTimer = null;
 
@@ -399,6 +470,7 @@
   function uid(){ return Math.random().toString(36).slice(2,9); }
 
   async function init(){
+    await loadAreaConfig();
     names = await safeGet('names', true);
     if(!names){
       document.getElementById('setupOverlay').classList.remove('hidden');
@@ -420,8 +492,13 @@
     restaurants = (await safeGet('restaurants', true)) || [];
     let areasMigrated = false;
     restaurants.forEach(r=>{
-      const migrated = migrateAreaKey(r.distance);
-      if(migrated !== r.distance){ r.distance = migrated; areasMigrated = true; }
+      const hadLegacyField = ('distance' in r);
+      const migratedAreas = migrateAreaKeys(r.areas !== undefined ? r.areas : r.distance);
+      const changed = hadLegacyField || !r.areas ||
+        migratedAreas.length !== r.areas.length || migratedAreas.some((a,i)=>a!==r.areas[i]);
+      r.areas = migratedAreas;
+      if(hadLegacyField) delete r.distance;
+      if(changed) areasMigrated = true;
     });
     if(areasMigrated) await safeSet('restaurants', restaurants, true);
     round = await safeGet('current_round', true);
@@ -436,7 +513,7 @@
   async function loadMyFilters(){
     const stored = await safeGet('filters_'+me, true);
     filters = stored || { budget: 3, areas: [], cuisines: [] };
-    filters.areas = filters.areas.map(migrateAreaKey);
+    filters.areas = migrateAreaKeys(filters.areas);
   }
   async function saveMyFilters(){
     await safeSet('filters_'+me, filters, true);
@@ -533,13 +610,38 @@
   }
 
   function renderAreaChips(){
-    document.querySelectorAll('#areaChips .chip').forEach(chip=>{
-      const val = chip.dataset.val;
-      chip.classList.toggle('selected', filters.areas.includes(val));
+    const wrap = document.getElementById('areaChips');
+    wrap.innerHTML = '';
+    Object.keys(AREA_LABELS).forEach(key=>{
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip' + (filters.areas.includes(key) ? ' selected' : '');
+      chip.textContent = AREA_LABELS[key];
       chip.onclick = ()=> updateFilters(f=>{
-        if(f.areas.includes(val)) f.areas = f.areas.filter(x=>x!==val);
-        else f.areas.push(val);
+        if(f.areas.includes(key)) f.areas = f.areas.filter(x=>x!==key);
+        else f.areas.push(key);
       });
+      wrap.appendChild(chip);
+    });
+  }
+
+  // Multi-select area chips for the "add a spot" form — separate from the filter panel's
+  // #areaChips since it edits a single restaurant's areas (newSpotAreas), not a filter set.
+  function renderNewAreaChips(){
+    const wrap = document.getElementById('newAreaChips');
+    if(!wrap) return;
+    wrap.innerHTML = '';
+    Object.keys(AREA_LABELS).forEach(key=>{
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip' + (newSpotAreas.includes(key) ? ' selected' : '');
+      chip.textContent = AREA_LABELS[key];
+      chip.onclick = ()=>{
+        if(newSpotAreas.includes(key)) newSpotAreas = newSpotAreas.filter(x=>x!==key);
+        else newSpotAreas.push(key);
+        renderNewAreaChips();
+      };
+      wrap.appendChild(chip);
     });
   }
 
@@ -547,7 +649,7 @@
     const otherKey = me==='a' ? 'b' : 'a';
     const stored = await safeGet('filters_'+otherKey, true);
     const other = stored || { budget: 3, areas: [], cuisines: [] };
-    other.areas = other.areas.map(migrateAreaKey);
+    other.areas = migrateAreaKeys(other.areas);
     return other;
   }
 
@@ -581,6 +683,7 @@
   // ---------- manage panel ----------
   function renderManagePanel(){
     renderCuisineChips();
+    renderNewAreaChips();
     const list = document.getElementById('spotList');
     list.innerHTML = '';
     if(restaurants.length===0){
@@ -591,7 +694,7 @@
       const row = document.createElement('div');
       row.className = 'list-item';
       const priceStr = '$'.repeat(r.price);
-      const distStr = areaLabel(r.distance);
+      const distStr = areaLabelsText(r.areas);
       const addressLine = r.address ? `<br><span class="meta">${escapeHtml(r.address)}</span>` : '';
       const mapsLine = restaurantMapsUrl(r) ? `<br>${mapsLinkHtml(r, 'color:var(--muted);')}` : '';
       row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span>${addressLine}${mapsLine}</div>`;
@@ -662,28 +765,38 @@
     });
   }
 
-  // Classifies a lat/lng into 'walkable' (if close to userCoords) or the nearest
-  // of the fixed Singapore area centroids otherwise.
-  function classifyArea(lat, lng, userCoords){
-    let kmFromUser = null;
-    if(userCoords){
-      kmFromUser = haversineKm(userCoords.lat, userCoords.lng, lat, lng);
-      if(kmFromUser < 1.2) return {key: 'walkable', km: kmFromUser};
-    }
+  // 'walkable' is relative to whoever is adding the spot right now, not a fixed place on the
+  // map — so it's judged purely by distance from userCoords, independent of AREA_CENTROIDS.
+  function isWalkable(kmFromUser){
+    return kmFromUser != null && kmFromUser < WALKABLE_RADIUS_KM;
+  }
+
+  // Fixed-precinct classification: nearest of the configured area centroids to (lat, lng).
+  // Has nothing to do with the user's own location.
+  function nearestPrecinct(lat, lng){
     let best = null, bestDist = Infinity;
     for(const key in AREA_CENTROIDS){
       const c = AREA_CENTROIDS[key];
       const d = haversineKm(lat, lng, c.lat, c.lng);
       if(d < bestDist){ bestDist = d; best = key; }
     }
-    return {key: best, km: kmFromUser};
+    return best;
   }
 
-  async function suggestDistance(lat, lng, statusEl){
+  // Classifies a lat/lng into 'walkable' (if within WALKABLE_RADIUS_KM of userCoords) or
+  // otherwise the nearest fixed precinct.
+  function classifyArea(lat, lng, userCoords){
+    const kmFromUser = userCoords ? haversineKm(userCoords.lat, userCoords.lng, lat, lng) : null;
+    if(isWalkable(kmFromUser)) return {key: 'walkable', km: kmFromUser};
+    return {key: nearestPrecinct(lat, lng), km: kmFromUser};
+  }
+
+  async function suggestArea(lat, lng, statusEl){
     const userCoords = await getGeolocation();
     const result = classifyArea(lat, lng, userCoords);
     if(!result.key) return;
-    document.getElementById('newDist').value = result.key;
+    if(!newSpotAreas.includes(result.key)) newSpotAreas.push(result.key);
+    renderNewAreaChips();
     const note = result.km != null
       ? ` (~${result.km.toFixed(1)} km away — looks like ${areaLabel(result.key)}, adjust if that's off)`
       : ` (looks like ${areaLabel(result.key)}, adjust if that's off)`;
@@ -738,7 +851,7 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
         document.getElementById('newAddress').value = parsed.address || '';
         document.getElementById('newNotes').value = parsed.notes || '';
         statusEl.textContent = 'Filled in below — check it over, then add to the list.';
-        if(hints.lat != null && hints.lng != null) suggestDistance(hints.lat, hints.lng, statusEl);
+        if(hints.lat != null && hints.lng != null) suggestArea(hints.lat, hints.lng, statusEl);
       }
     }catch(e){
       console.error(e);
@@ -753,11 +866,11 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
     if(!name) return;
     const cuisine = document.getElementById('newCuisine').value.trim();
     const price = parseInt(document.getElementById('newPrice').value,10);
-    const distance = document.getElementById('newDist').value;
+    const areas = [...newSpotAreas];
     const address = document.getElementById('newAddress').value.trim();
     const mapsLink = safeHttpUrl(document.getElementById('mapsLink').value.trim()) || '';
     const notes = document.getElementById('newNotes').value.trim();
-    restaurants.push({id: uid(), name, cuisine, price, distance, address, mapsLink, notes});
+    restaurants.push({id: uid(), name, cuisine, price, areas, address, mapsLink, notes});
     await safeSet('restaurants', restaurants, true);
     document.getElementById('newName').value='';
     document.getElementById('newCuisine').value='';
@@ -765,6 +878,7 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
     document.getElementById('newNotes').value='';
     document.getElementById('mapsLink').value='';
     document.getElementById('autofillStatus').textContent='';
+    newSpotAreas = [];
     renderManagePanel();
   };
 
@@ -808,17 +922,17 @@ If you can't find enough genuine real matches, return fewer items rather than in
       const arr = JSON.parse(clean);
       const fallbackArea = filters.areas[0] || 'novena';
       return arr.filter(x => x && x.name).map(x => {
-        let distance = fallbackArea;
+        let area = fallbackArea;
         if(typeof x.lat === 'number' && typeof x.lng === 'number'){
           const classified = classifyArea(x.lat, x.lng, coords);
-          if(classified.key) distance = classified.key;
+          if(classified.key) area = classified.key;
         }
         return {
           id: 'ext-' + uid(),
           name: x.name,
           cuisine: x.cuisine || '',
           price: (x.price >= 1 && x.price <= 3) ? x.price : filters.budget,
-          distance,
+          areas: [area],
           address: x.address || '',
           notes: x.notes || '',
           external: true
@@ -845,7 +959,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
     btn.textContent = 'Shuffling...';
 
     let pool = restaurants.filter(r => r.price <= combined.budget &&
-      (combined.areas.length===0 || combined.areas.includes(r.distance)) &&
+      (combined.areas.length===0 || (r.areas||[]).some(a=>combined.areas.includes(a))) &&
       (combined.cuisines.length===0 || combined.cuisines.includes(r.cuisine)));
     let wildcardPool = restaurants.filter(r => !pool.find(p=>p.id===r.id));
     if(pool.length===0){ pool = [...restaurants]; wildcardPool = []; }
@@ -925,6 +1039,15 @@ If you can't find enough genuine real matches, return fewer items rather than in
       renderNoRound();
       return;
     }
+    // Normalize in-memory only (not written back) — a round can still be in flight from
+    // before an area-key migration, and voting shouldn't risk clobbering the other person's
+    // concurrent writes to current_round.
+    if(round.externalCards){
+      Object.values(round.externalCards).forEach(c=>{
+        c.areas = migrateAreaKeys(c.areas !== undefined ? c.areas : c.distance);
+        delete c.distance;
+      });
+    }
     myVotes = (await safeGet('votes:'+round.id+':'+me, true)) || {};
     deckIndex = round.deck.filter(id => id in myVotes).length;
     renderRound();
@@ -981,7 +1104,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
           <div class="tags">
             <span>${escapeHtml(r.cuisine||'—')}</span>
             <span>${'$'.repeat(r.price)}</span>
-            <span>${areaLabel(r.distance)}</span>
+            <span>${areaLabelsText(r.areas)}</span>
           </div>
           ${mapsLinkHtml(r, 'color:var(--text);margin-top:4px;')}
           ${r.notes ? '<div class="notes">'+escapeHtml(r.notes)+'</div>' : ''}
@@ -1001,7 +1124,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
     if(r.external){
       document.getElementById('btnSaveExternal').onclick = async (e)=>{
         e.stopPropagation();
-        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, distance: r.distance, address: r.address || '', mapsLink: r.mapsLink || '', notes: r.notes});
+        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, areas: r.areas, address: r.address || '', mapsLink: r.mapsLink || '', notes: r.notes});
         await safeSet('restaurants', restaurants, true);
         const b = document.getElementById('btnSaveExternal');
         b.textContent = 'Saved ✓'; b.disabled = true;
@@ -1087,7 +1210,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
       html += `<div class="match-card ${isPick?'pick':''}">
         ${isPick ? '<div class="badge">TONIGHT\'S PICK</div>' : (r.external ? '<div class="badge">✦ NEW FIND</div>' : '')}
         <h3>${escapeHtml(r.name)}</h3>
-        <div class="tags"><span>${escapeHtml(r.cuisine||'—')}</span><span>${'$'.repeat(r.price)}</span><span>${areaLabel(r.distance)}</span></div>
+        <div class="tags"><span>${escapeHtml(r.cuisine||'—')}</span><span>${'$'.repeat(r.price)}</span><span>${areaLabelsText(r.areas)}</span></div>
         ${mapsLinkHtml(r, 'color:var(--text);display:inline-block;margin-top:6px;')}
       </div>`;
     });
