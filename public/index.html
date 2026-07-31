@@ -560,7 +560,8 @@
       const priceStr = '$'.repeat(r.price);
       const distStr = areaLabel(r.distance);
       const addressLine = r.address ? `<br><span class="meta">${escapeHtml(r.address)}</span>` : '';
-      row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span>${addressLine}</div>`;
+      const mapsLine = restaurantMapsUrl(r) ? `<br>${mapsLinkHtml(r, 'color:var(--muted);')}` : '';
+      row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span>${addressLine}${mapsLine}</div>`;
       const del = document.createElement('button');
       del.textContent = 'Remove';
       del.onclick = async ()=>{
@@ -573,6 +574,29 @@
     });
   }
   function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+  function safeHttpUrl(u){
+    if(!u) return null;
+    try{
+      const parsed = new URL(u);
+      if(parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+    }catch(e){}
+    return null;
+  }
+  // Prefers the saved Maps link; falls back to a Maps search built from name+address
+  // (covers AI-suggested wildcards, which never have a pasted link of their own).
+  function restaurantMapsUrl(r){
+    const direct = safeHttpUrl(r.mapsLink);
+    if(direct) return direct;
+    const queryParts = [r.name, r.address].filter(Boolean);
+    if(!queryParts.length) return null;
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(queryParts.join(', ') + ', Singapore');
+  }
+  function mapsLinkHtml(r, extraStyle){
+    const url = restaurantMapsUrl(r);
+    if(!url) return '';
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-decoration:underline;${extraStyle||''}">📍 View on Maps</a>`;
+  }
 
   // ---------- Google Maps link autofill ----------
   function parseMapsUrl(url){
@@ -698,8 +722,9 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
     const price = parseInt(document.getElementById('newPrice').value,10);
     const distance = document.getElementById('newDist').value;
     const address = document.getElementById('newAddress').value.trim();
+    const mapsLink = safeHttpUrl(document.getElementById('mapsLink').value.trim()) || '';
     const notes = document.getElementById('newNotes').value.trim();
-    restaurants.push({id: uid(), name, cuisine, price, distance, address, notes});
+    restaurants.push({id: uid(), name, cuisine, price, distance, address, mapsLink, notes});
     await safeSet('restaurants', restaurants, true);
     document.getElementById('newName').value='';
     document.getElementById('newCuisine').value='';
@@ -923,6 +948,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
             <span>${'$'.repeat(r.price)}</span>
             <span>${areaLabel(r.distance)}</span>
           </div>
+          ${mapsLinkHtml(r, 'color:var(--text);margin-top:4px;')}
           ${r.notes ? '<div class="notes">'+escapeHtml(r.notes)+'</div>' : ''}
           ${r.external ? '<button id="btnSaveExternal" style="align-self:flex-start;margin-top:8px;background:none;border:1px solid rgba(0,0,0,0.2);border-radius:6px;padding:5px 9px;font-size:11px;font-family:\'IBM Plex Mono\',monospace;cursor:pointer;color:var(--text);">+ Save to our list</button>' : ''}
           <div class="stamp no" id="stampNo">NO</div>
@@ -940,7 +966,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
     if(r.external){
       document.getElementById('btnSaveExternal').onclick = async (e)=>{
         e.stopPropagation();
-        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, distance: r.distance, address: r.address || '', notes: r.notes});
+        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, distance: r.distance, address: r.address || '', mapsLink: r.mapsLink || '', notes: r.notes});
         await safeSet('restaurants', restaurants, true);
         const b = document.getElementById('btnSaveExternal');
         b.textContent = 'Saved ✓'; b.disabled = true;
@@ -1027,6 +1053,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
         ${isPick ? '<div class="badge">TONIGHT\'S PICK</div>' : (r.external ? '<div class="badge">✦ NEW FIND</div>' : '')}
         <h3>${escapeHtml(r.name)}</h3>
         <div class="tags"><span>${escapeHtml(r.cuisine||'—')}</span><span>${'$'.repeat(r.price)}</span><span>${areaLabel(r.distance)}</span></div>
+        ${mapsLinkHtml(r, 'color:var(--text);display:inline-block;margin-top:6px;')}
       </div>`;
     });
     if(matchIds.length>1){
