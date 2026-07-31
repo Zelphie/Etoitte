@@ -167,6 +167,7 @@
     <button id="btnFilters">Set filters</button>
     <button id="btnManage">Edit spots</button>
     <button class="primary" id="btnShuffle">Shuffle a new round</button>
+    <button id="btnAiToggle" title="Controls the Maps-link autofill and wildcard suggestions. These call an AI model on our API key and cost a small amount per use — off by default.">AI-assist: Off</button>
   </div>
 
   <div class="panel hidden" id="filterPanel">
@@ -285,6 +286,7 @@
   let round = null;        // {id, filters, deck:[ids], wildcardIds:[ids]}
   let myVotes = {};         // {id: bool}
   let filters = { budget: 3, areas: [], cuisines: [] };
+  let aiAssistEnabled = false; // shared toggle for Maps autofill + wildcard suggestions (costs API $, off by default)
 
   const AREA_LABELS = {
     walkable: 'Walkable',
@@ -330,9 +332,22 @@
     renderWho();
     restaurants = (await safeGet('restaurants', true)) || [];
     round = await safeGet('current_round', true);
+    aiAssistEnabled = !!(await safeGet('ai_assist_enabled', true));
+    renderAiToggle();
     renderManagePanel();
     await loadRoundState();
   }
+
+  function renderAiToggle(){
+    const btn = document.getElementById('btnAiToggle');
+    btn.textContent = 'AI-assist: ' + (aiAssistEnabled ? 'On' : 'Off');
+    btn.className = aiAssistEnabled ? 'primary' : '';
+  }
+  document.getElementById('btnAiToggle').onclick = async ()=>{
+    aiAssistEnabled = !aiAssistEnabled;
+    renderAiToggle();
+    await safeSet('ai_assist_enabled', aiAssistEnabled, true);
+  };
 
   function renderWho(){
     whoToggle.innerHTML = '';
@@ -488,6 +503,7 @@
     const statusEl = document.getElementById('autofillStatus');
     const btn = document.getElementById('btnAutofill');
     if(!url){ statusEl.textContent = 'Paste a Google Maps link first.'; return; }
+    if(!aiAssistEnabled){ statusEl.textContent = 'AI-assist is off (toggle it in the toolbar) — fill this in by hand below.'; return; }
     statusEl.textContent = 'Looking that up...';
     btn.disabled = true;
     const hints = parseMapsUrl(url);
@@ -635,10 +651,13 @@ If you can't find enough genuine real matches, return fewer items rather than in
     // Every 4 matching cards gets one wildcard slot, alternating internal (from your
     // own list, but filtered out) / external (a real find from outside your list).
     const wildcardSlots = Math.floor(pool.length / 4);
-    const externalSlotsNeeded = Math.floor(wildcardSlots / 2);
-    btn.textContent = 'Scouting a wildcard...';
-    const coords = await getGeolocation();
-    const externalCandidates = await fetchExternalWildcards(externalSlotsNeeded, coords, restaurants.map(r=>r.name), filters);
+    const externalSlotsNeeded = aiAssistEnabled ? Math.floor(wildcardSlots / 2) : 0;
+    let externalCandidates = [];
+    if(externalSlotsNeeded > 0){
+      btn.textContent = 'Scouting a wildcard...';
+      const coords = await getGeolocation();
+      externalCandidates = await fetchExternalWildcards(externalSlotsNeeded, coords, restaurants.map(r=>r.name), filters);
+    }
 
     const deck = [];
     const wildcardIds = [];

@@ -48,11 +48,11 @@ async function handleStorage(request, env) {
 async function handleAnthropic(request, env) {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  // Off by default. Only "true" (set as a dashboard var, not in
-  // wrangler.jsonc, so it can be flipped without a redeploy) enables
-  // outbound calls to Anthropic — everything else short-circuits here
-  // with zero cost.
-  if (env.AI_ASSIST_ENABLED !== "true") {
+  // Off by default. The app has an in-UI toggle that writes "true"/"false"
+  // to this same KV store under data:ai_assist_enabled; anything else
+  // (including unset) short-circuits here with zero calls to Anthropic.
+  const flag = await env.ETOITTE_KV.get("data:ai_assist_enabled");
+  if (flag !== "true") {
     return json({ content: [] });
   }
 
