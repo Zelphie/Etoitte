@@ -198,6 +198,10 @@
       <div class="chip-row" id="cuisineChips"></div>
     </div>
     <div class="small-note">Filters shape most of the deck — we'll still slip in the occasional wildcard that ignores them, just to keep you both honest.</div>
+    <div class="field" style="margin-top:14px;">
+      <button id="btnConfirmFilters" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--yes);color:var(--paper);font-weight:600;cursor:pointer;">Confirm my filters</button>
+      <div class="small-note" id="filterConfirmStatus" style="margin-top:8px;">Both of you need to confirm before shuffling.</div>
+    </div>
   </div>
 
   <div class="panel hidden" id="managePanel">
@@ -334,7 +338,9 @@
     round = await safeGet('current_round', true);
     aiAssistEnabled = !!(await safeGet('ai_assist_enabled', true));
     renderAiToggle();
+    filters = (await safeGet('filters', true)) || filters;
     renderManagePanel();
+    await renderFilterPanel();
     await loadRoundState();
   }
 
@@ -371,6 +377,20 @@
     document.getElementById('filterPanel').classList.add('hidden');
   };
 
+  // Filters are shared (not per-browser): stored under 'filters', and each
+  // person's agreement is stored separately as a signature of the filters
+  // they confirmed, under filters_confirm_a / filters_confirm_b. A round can
+  // only be shuffled once both signatures match the current filters —
+  // any edit invalidates prior confirmations automatically.
+  function filtersSignature(f){
+    return JSON.stringify({ budget: f.budget, areas: [...f.areas].sort(), cuisines: [...f.cuisines].sort() });
+  }
+  async function updateFilters(mutator){
+    mutator(filters);
+    await safeSet('filters', filters, true);
+    await renderFilterPanel();
+  }
+
   function renderCuisineChips(){
     const wrap = document.getElementById('cuisineChips');
     const cuisines = [...new Set(restaurants.map(r=>r.cuisine).filter(Boolean))];
@@ -379,37 +399,57 @@
       const chip = document.createElement('button');
       chip.className = 'chip' + (filters.cuisines.includes(c) ? ' selected' : '');
       chip.textContent = c;
-      chip.onclick = ()=>{
-        if(filters.cuisines.includes(c)) filters.cuisines = filters.cuisines.filter(x=>x!==c);
-        else filters.cuisines.push(c);
-        renderCuisineChips();
-      };
+      chip.onclick = ()=> updateFilters(f=>{
+        if(f.cuisines.includes(c)) f.cuisines = f.cuisines.filter(x=>x!==c);
+        else f.cuisines.push(c);
+      });
       wrap.appendChild(chip);
     });
     if(cuisines.length===0){ wrap.innerHTML = '<span class="small-note">Add some spots first and cuisine tags will show up here.</span>'; }
   }
-  function wireChipGroup(id, field){
-    document.querySelectorAll('#'+id+' .chip').forEach(chip=>{
-      chip.onclick = ()=>{
-        filters[field] = parseInt(chip.dataset.val,10);
-        document.querySelectorAll('#'+id+' .chip').forEach(c=>c.classList.remove('selected'));
-        chip.classList.add('selected');
-      };
-    });
-  }
-  wireChipGroup('budgetChips','budget');
 
-  function wireAreaChips(){
-    document.querySelectorAll('#areaChips .chip').forEach(chip=>{
-      chip.onclick = ()=>{
-        const val = chip.dataset.val;
-        if(filters.areas.includes(val)) filters.areas = filters.areas.filter(x=>x!==val);
-        else filters.areas.push(val);
-        chip.classList.toggle('selected');
-      };
+  function renderBudgetChips(){
+    document.querySelectorAll('#budgetChips .chip').forEach(chip=>{
+      const val = parseInt(chip.dataset.val,10);
+      chip.classList.toggle('selected', val === filters.budget);
+      chip.onclick = ()=> updateFilters(f=>{ f.budget = val; });
     });
   }
-  wireAreaChips();
+
+  function renderAreaChips(){
+    document.querySelectorAll('#areaChips .chip').forEach(chip=>{
+      const val = chip.dataset.val;
+      chip.classList.toggle('selected', filters.areas.includes(val));
+      chip.onclick = ()=> updateFilters(f=>{
+        if(f.areas.includes(val)) f.areas = f.areas.filter(x=>x!==val);
+        else f.areas.push(val);
+      });
+    });
+  }
+
+  async function renderFilterConfirmStatus(){
+    const sig = filtersSignature(filters);
+    const [confirmA, confirmB] = await Promise.all([
+      safeGet('filters_confirm_a', true),
+      safeGet('filters_confirm_b', true)
+    ]);
+    const aOk = confirmA === sig, bOk = confirmB === sig;
+    document.getElementById('filterConfirmStatus').textContent =
+      `${names.a}: ${aOk ? 'confirmed ✓' : 'not yet'} · ${names.b}: ${bOk ? 'confirmed ✓' : 'not yet'}`;
+    return { sig, aOk, bOk };
+  }
+
+  async function renderFilterPanel(){
+    renderBudgetChips();
+    renderAreaChips();
+    renderCuisineChips();
+    await renderFilterConfirmStatus();
+  }
+
+  document.getElementById('btnConfirmFilters').onclick = async ()=>{
+    await safeSet('filters_confirm_'+me, filtersSignature(filters), true);
+    await renderFilterConfirmStatus();
+  };
 
   // ---------- manage panel ----------
   function renderManagePanel(){
@@ -634,6 +674,16 @@ If you can't find enough genuine real matches, return fewer items rather than in
   document.getElementById('btnShuffle').onclick = async ()=>{
     if(restaurants.length < 2){
       alert('Add at least a couple of spots first (tap "Edit spots").');
+      return;
+    }
+    filters = (await safeGet('filters', true)) || filters;
+    const { aOk, bOk } = await renderFilterConfirmStatus();
+    if(!aOk || !bOk){
+      const missing = [!aOk && names.a, !bOk && names.b].filter(Boolean).join(' and ');
+      alert(`Both of you need to confirm the current filters first. Still waiting on: ${missing}.\n\nOpen "Set filters" and tap "Confirm my filters".`);
+      document.getElementById('filterPanel').classList.remove('hidden');
+      document.getElementById('managePanel').classList.add('hidden');
+      renderFilterPanel();
       return;
     }
     const btn = document.getElementById('btnShuffle');
