@@ -111,12 +111,19 @@
     font-size:10px;font-weight:700;padding:4px 10px 4px 12px;letter-spacing:0.06em;transform:rotate(3deg);
     box-shadow:0 3px 6px rgba(0,0,0,0.25);
   }
-  .card h3{font-family:'Special Elite',monospace;font-weight:400;font-size:26px;margin:14px 0 8px;line-height:1.15;}
+  .card h3{
+    font-family:'Special Elite',monospace;font-weight:400;font-size:26px;margin:14px 0 8px;line-height:1.15;
+    overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;text-overflow:ellipsis;
+  }
+  .card h3.long-title{font-size:19px;}
   .card .tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
   .card .tags span{
     font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 9px;border-radius:6px;background:rgba(0,0,0,0.06);color:var(--text);
   }
-  .card .notes{font-size:13px;font-style:italic;color:#4a4636;line-height:1.5;margin-top:auto;}
+  .card .notes{
+    font-size:13px;font-style:italic;color:#4a4636;line-height:1.5;margin-top:auto;
+    overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-overflow:ellipsis;
+  }
   .card .stamp{
     position:absolute;top:40%;left:50%;font-family:'Special Elite',monospace;font-size:52px;font-weight:400;
     border:6px solid currentColor;border-radius:10px;padding:4px 18px;letter-spacing:2px;opacity:0;
@@ -222,7 +229,7 @@
       <div class="small-note" id="autofillStatus"></div>
     </div>
     <div class="field row">
-      <input type="text" id="newName" placeholder="Restaurant name">
+      <input type="text" id="newName" placeholder="Restaurant name (or a vague idea — 'that porridge place from mothership')">
     </div>
     <div class="field row">
       <input type="text" id="newCuisine" placeholder="Cuisine (e.g. Ramen)">
@@ -890,6 +897,14 @@
   }
   function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
+  // Swipe cards have a fixed height (deck-wrap's absolute positioning + the drag animation
+  // assume a stable box, so that height isn't changing) — a title much longer than a typical
+  // restaurant name (e.g. a vague wishlist description) needs a smaller font to have any chance
+  // of fitting, on top of the CSS line-clamp safety net that caps it outright either way.
+  function cardTitleClass(name){
+    return (name && name.length > 30) ? 'long-title' : '';
+  }
+
   function safeHttpUrl(u){
     if(!u) return null;
     try{
@@ -1279,7 +1294,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
         <div class="card" id="activeCard">
           ${isWildcard ? '<div class="wildcard-flag">'+flagLabel+'</div>' : ''}
           <div class="ticket-no">No. ${String(deckIndex+1).padStart(3,'0')}</div>
-          <h3>${escapeHtml(r.name)}</h3>
+          <h3 class="${cardTitleClass(r.name)}">${escapeHtml(r.name)}</h3>
           <div class="tags">
             <span>${escapeHtml(r.cuisine||'—')}</span>
             <span>${'$'.repeat(r.price)}</span>
