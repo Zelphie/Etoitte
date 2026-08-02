@@ -554,8 +554,29 @@
     return Array.from(new Set(list.flatMap(key => expandAreaKey(key))));
   }
   function areaLabel(key){ return AREA_LABELS[key] || 'Area not set'; }
+  // Reverse lookup: which region(s) a neighborhood key belongs to. Nothing currently maps to
+  // more than one (bukittimah did briefly — see the DEFAULT_REGIONS comment above — but the
+  // data shape still allows it, so this returns an array rather than assuming a single region).
+  function regionsForKey(key){
+    return Object.keys(REGIONS).filter(regionKey => REGIONS[regionKey].includes(key));
+  }
+  // Read-only rollup of an already-tagged restaurant's areas up to region level — e.g.
+  // bukitbatok + clementi both resolve to 'West' and dedup to a single entry, not "West, West".
+  // A key in more than one region (were that ever reintroduced) would correctly show every
+  // region it's in. 'walkable' has no region — it's relative to the user, not a fixed place —
+  // so it surfaces as its own "Walkable" entry rather than being dropped or rolled into
+  // anything. A key not currently assigned to any region (shouldn't normally happen) falls back
+  // to its own neighborhood label rather than silently disappearing. This is display-only: the
+  // add/edit selector (renderAreaSelector) still works at the granular neighborhood level, and
+  // is unaffected by this function.
   function areaLabelsText(keys){
-    return (keys && keys.length) ? keys.map(areaLabel).join(', ') : 'Area not set';
+    if(!keys || !keys.length) return 'Area not set';
+    const labels = keys.flatMap(key=>{
+      if(key === 'walkable') return [areaLabel('walkable')];
+      const regions = regionsForKey(key);
+      return regions.length ? regions.map(r => REGION_LABELS[r] || r) : [areaLabel(key)];
+    });
+    return Array.from(new Set(labels)).join(', ');
   }
   // Deduped set of every neighborhood key that appears in at least one region — a Set, so a
   // key assigned to more than one region (nothing currently is, but the data shape allows it)
