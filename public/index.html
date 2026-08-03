@@ -196,7 +196,7 @@
   <div class="toolbar">
     <button id="btnFilters">Set filters</button>
     <button id="btnManage">Edit spots</button>
-    <button class="primary" id="btnShuffle">Shuffle a new round</button>
+    <button class="primary" id="btnShuffle">Start a round</button>
     <button id="btnAiToggle" title="Controls the Maps-link autofill and wildcard suggestions. These call an AI model on our API key and cost a small amount per use — off by default.">AI-assist: Off</button>
   </div>
 
@@ -301,11 +301,24 @@
   async function safeGet(key, shared){ try{ const r = await S.get(key, !!shared); return r ? JSON.parse(r.value) : null; }catch(e){ return null; } }
   async function safeSet(key, value, shared){ try{ return await S.set(key, JSON.stringify(value), !!shared); }catch(e){ console.error('storage set failed', e); return null; } }
   async function safeDelete(key, shared){ try{ return await S.delete(key, !!shared); }catch(e){ return null; } }
+  // Best-effort Telegram ping — fire-and-forget, never blocks or throws into the caller. The
+  // worker no-ops server-side if no bot token/chat id is configured, so this is safe to call
+  // unconditionally regardless of whether notifications have actually been set up.
+  async function notify(target, text){
+    try{
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({target, text})
+      });
+    }catch(e){ console.error('notify failed', e); }
+  }
 
   let names = null;       // {a, b}
   let me = null;           // 'a' or 'b'
   let restaurants = [];    // array
   let round = null;        // {id, filters, deck:[ids], wildcardIds:[ids]}
+  let roundRequest = null; // {id, requestedBy, createdAt} — pending confirmation before a round exists
   let myVotes = {};         // {id: bool}
   let filters = { budget: 3, areas: [], cuisines: [] }; // whichever person is active (me) — their own, independent filters
   let aiAssistEnabled = false; // shared toggle for Maps autofill + wildcard suggestions (costs API $, off by default)
@@ -1202,19 +1215,13 @@ If you can't find enough genuine real matches, return fewer items rather than in
     }
   }
 
-  document.getElementById('btnShuffle').onclick = async ()=>{
-    if(restaurants.length < 2){
-      alert('Add at least a couple of spots first (tap "Edit spots").');
-      return;
-    }
+  // Builds and saves a new round from both people's current filters. Pulled out of the old
+  // instant-shuffle button handler so it can be triggered from wherever "both people are now
+  // ready" is actually detected (see tryStartRound), not just a direct button click.
+  async function generateRound(){
     await loadMyFilters();
     const partnerFilters = await loadPartnerFilters();
     const combined = combineFilters(filters, partnerFilters);
-
-    const btn = document.getElementById('btnShuffle');
-    const originalLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Shuffling...';
 
     let pool = restaurants.filter(r => r.price <= combined.budget &&
       (combined.areas.length===0 || (r.areas||[]).some(a=>combined.areas.includes(a))) &&
@@ -1232,7 +1239,6 @@ If you can't find enough genuine real matches, return fewer items rather than in
     const externalSlotsNeeded = aiAssistEnabled ? Math.floor(wildcardSlots / 2) : 0;
     let externalCandidates = [];
     if(externalSlotsNeeded > 0){
-      btn.textContent = 'Scouting a wildcard...';
       const coords = await getGeolocation();
       externalCandidates = await fetchExternalWildcards(externalSlotsNeeded, coords, restaurants.map(r=>r.name), combined);
     }
@@ -1271,8 +1277,20 @@ If you can't find enough genuine real matches, return fewer items rather than in
     round = newRound;
     await safeSet('current_round', round, true);
     document.getElementById('filterPanel').classList.add('hidden');
-    btn.disabled = false;
-    btn.textContent = originalLabel;
+  }
+
+  // Clicking "Start a round" no longer shuffles immediately — it raises a request that both
+  // people confirm (see renderRoundRequest/markReady) before a round actually gets generated.
+  document.getElementById('btnShuffle').onclick = async ()=>{
+    if(round || roundRequest) return; // toolbar button should be disabled in this state already
+    if(restaurants.length < 2){
+      alert('Add at least a couple of spots first (tap "Edit spots").');
+      return;
+    }
+    roundRequest = { id: uid(), requestedBy: me, createdAt: Date.now() };
+    await safeSet('round_request', roundRequest, true);
+    const otherKey = me==='a' ? 'b' : 'a';
+    notify(otherKey, `${names[me]} wants to shuffle a round on Etoitte — set your filters and tap "I'm ready" when you're in!`);
     await loadRoundState();
   };
 
@@ -1290,11 +1308,30 @@ If you can't find enough genuine real matches, return fewer items rather than in
   }
 
   // ---------- round state / voting ----------
+  // Toolbar button reflects whichever of the three states (idle / request pending / round
+  // active) is currently true — called every time that state changes, from loadRoundState.
+  function updateShuffleButton(){
+    const btn = document.getElementById('btnShuffle');
+    if(round){
+      btn.textContent = 'Round in progress';
+      btn.disabled = true;
+    } else if(roundRequest){
+      btn.textContent = 'Round request pending';
+      btn.disabled = true;
+    } else {
+      btn.textContent = 'Start a round';
+      btn.disabled = false;
+    }
+  }
+
   async function loadRoundState(){
     if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
     round = await safeGet('current_round', true);
+    roundRequest = round ? null : await safeGet('round_request', true);
+    updateShuffleButton();
     if(!round){
-      renderNoRound();
+      if(roundRequest){ await renderRoundRequest(); }
+      else { renderNoRound(); }
       return;
     }
     // Normalize in-memory only (not written back) — a round can still be in flight from
@@ -1312,7 +1349,96 @@ If you can't find enough genuine real matches, return fewer items rather than in
   }
 
   function renderNoRound(){
-    mainArea.innerHTML = `<div class="status-block"><p>No round going yet.</p><div class="sub">Set your filters, then tap "Shuffle a new round" to start swiping.</div></div>`;
+    mainArea.innerHTML = `<div class="status-block"><p>No round going yet.</p><div class="sub">Set your filters, then tap "Start a round" — you'll both confirm you're ready before it begins.</div></div>`;
+  }
+
+  // ---------- round request / ready confirmation ----------
+  // A round no longer starts the instant someone clicks the toolbar button — it raises a
+  // shared request first, and only actually generates once both people have independently
+  // confirmed "I'm ready" against that same request (see markReady/tryStartRound). Readiness is
+  // tracked as two separate per-person keys (ready:<requestId>:a / :b), the same pattern already
+  // used for votes:<roundId>:<a|b> — each person only ever writes their own key, so there's no
+  // shared-object clobber risk the way there would be with one object holding both flags.
+  async function renderRoundRequest(){
+    const otherKey = me==='a' ? 'b' : 'a';
+    const myReady = !!(await safeGet('ready:'+roundRequest.id+':'+me, true));
+    const otherReady = !!(await safeGet('ready:'+roundRequest.id+':'+otherKey, true));
+
+    if(myReady && otherReady){
+      await tryStartRound();
+      return;
+    }
+    if(myReady){
+      mainArea.innerHTML = `<div class="status-block"><div class="spinner"></div><p>Waiting on ${names[otherKey]} to get ready...</p><div class="sub">Checking back every few seconds.</div></div>${cancelRoundRequestHtml()}`;
+      wireCancelRoundRequest();
+      if(!pollTimer){
+        pollTimer = setInterval(async ()=>{
+          const rr = await safeGet('round_request', true);
+          if(!rr){ clearInterval(pollTimer); pollTimer=null; await loadRoundState(); return; }
+          const ready = !!(await safeGet('ready:'+roundRequest.id+':'+otherKey, true));
+          if(ready){ clearInterval(pollTimer); pollTimer=null; await loadRoundState(); }
+        }, 3000);
+      }
+      return;
+    }
+    mainArea.innerHTML = `<div class="status-block">
+      <p>${escapeHtml(names[roundRequest.requestedBy])} wants to shuffle a round.${otherReady ? ` ${escapeHtml(names[otherKey])} is ready!` : ''}</p>
+      <div class="sub">Set your filters above, then confirm you're in.</div>
+      <button id="btnReady" class="primary" style="margin-top:14px;padding:10px 20px;border-radius:9px;border:none;background:var(--yes);color:var(--paper);font-weight:700;cursor:pointer;">I'm ready</button>
+    </div>${cancelRoundRequestHtml()}`;
+    document.getElementById('btnReady').onclick = markReady;
+    wireCancelRoundRequest();
+  }
+
+  async function markReady(){
+    await safeSet('ready:'+roundRequest.id+':'+me, true, true);
+    const otherKey = me==='a' ? 'b' : 'a';
+    const otherReady = !!(await safeGet('ready:'+roundRequest.id+':'+otherKey, true));
+    if(otherReady){ await tryStartRound(); }
+    else { await loadRoundState(); }
+  }
+
+  // Whichever person's readiness completes the pair generates the round. Guards against both
+  // people's clients doing this near-simultaneously by re-checking current_round fresh right
+  // before generating — if the other side already won that race, this just loads what they made
+  // instead of creating a second one.
+  async function tryStartRound(){
+    if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+    const already = await safeGet('current_round', true);
+    if(already){
+      await safeDelete('round_request', true);
+      await loadRoundState();
+      return;
+    }
+    mainArea.innerHTML = `<div class="status-block"><div class="spinner"></div><p>Starting your round...</p></div>`;
+    await generateRound();
+    if(roundRequest){
+      await safeDelete('ready:'+roundRequest.id+':a', true);
+      await safeDelete('ready:'+roundRequest.id+':b', true);
+    }
+    await safeDelete('round_request', true);
+    notify('both', 'Round started on Etoitte — time to swipe! 🍽️');
+    await loadRoundState();
+  }
+
+  function cancelRoundRequestHtml(){
+    return `<div style="text-align:center;margin-top:16px;">
+      <button id="btnCancelRoundRequest" style="background:none;border:none;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;text-decoration:underline;cursor:pointer;padding:4px;">Cancel this request</button>
+    </div>`;
+  }
+  function wireCancelRoundRequest(){
+    const b = document.getElementById('btnCancelRoundRequest');
+    if(b) b.onclick = cancelRoundRequest;
+  }
+  async function cancelRoundRequest(){
+    if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+    if(roundRequest){
+      await safeDelete('ready:'+roundRequest.id+':a', true);
+      await safeDelete('ready:'+roundRequest.id+':b', true);
+      await safeDelete('round_request', true);
+    }
+    roundRequest = null;
+    await loadRoundState();
   }
 
   function clearRoundControlHtml(){
@@ -1331,10 +1457,9 @@ If you can't find enough genuine real matches, return fewer items rather than in
       await safeDelete('votes:'+round.id+':b', true);
       await safeDelete('current_round', true);
     }
-    round = null;
     myVotes = {};
     deckIndex = 0;
-    renderNoRound();
+    await loadRoundState();
   }
 
   function renderRound(){
@@ -1431,6 +1556,18 @@ If you can't find enough genuine real matches, return fewer items rather than in
     renderRound();
   }
 
+  // Fires exactly once per round (guarded by a KV flag, since this can be reached both by
+  // whoever just finished swiping last AND by the other side's poll catching up to the same
+  // "both done" state within moments of each other) — whichever of the two gets there first
+  // sends the notification, the other sees the flag already set and skips it.
+  async function notifyRoundCompleteOnce(){
+    const key = 'notified_complete:' + round.id;
+    const already = await safeGet(key, true);
+    if(already) return;
+    await safeSet(key, true, true);
+    notify('both', 'Results are in on Etoitte! 🎉');
+  }
+
   async function renderWaitingOrMatches(){
     const otherKey = me==='a' ? 'b' : 'a';
     const otherVotes = (await safeGet('votes:'+round.id+':'+otherKey, true)) || {};
@@ -1448,6 +1585,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
       return;
     }
     if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+    await notifyRoundCompleteOnce();
     const matchIds = round.deck.filter(id => myVotes[id]===true && otherVotes[id]===true);
     const uniqueMatches = [...new Set(matchIds)];
     if(uniqueMatches.length===0){

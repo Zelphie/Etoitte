@@ -130,12 +130,60 @@ async function handleAnthropic(request, env) {
   });
 }
 
+// Sends a Telegram message to one or both people via the bot's sendMessage API. The chat ids
+// are looked up server-side from the same generic KV store the client already reads/writes
+// (data:telegram_chat_a / data:telegram_chat_b, set once during setup) so the client only ever
+// says *who* to notify, never a raw chat id directly. No-ops quietly — never errors the caller —
+// if TELEGRAM_BOT_TOKEN isn't configured as a secret yet, or a chat id isn't set up: notifications
+// are a nice-to-have layered on top of the app, not something any core flow should depend on.
+async function handleNotify(request, env) {
+  if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+  if (!env.TELEGRAM_BOT_TOKEN) return json({ ok: true, skipped: "no bot token configured" });
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json({ error: "invalid json" }, 400);
+  }
+  const { target, text } = body;
+  if (!text || typeof text !== "string") return json({ error: "text required" }, 400);
+  if (!["a", "b", "both"].includes(target)) return json({ error: "invalid target" }, 400);
+
+  const who = target === "both" ? ["a", "b"] : [target];
+  const chatIds = [];
+  for (const person of who) {
+    const raw = await env.ETOITTE_KV.get("data:telegram_chat_" + person);
+    if (!raw) continue;
+    try {
+      chatIds.push(JSON.parse(raw));
+    } catch (e) {
+      // malformed stored value — skip rather than fail the whole request
+    }
+  }
+
+  await Promise.all(
+    chatIds.map((chatId) =>
+      fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text }),
+      }).catch((e) => {
+        /* best-effort — a failed Telegram send shouldn't surface as an app error */
+      })
+    )
+  );
+
+  return json({ ok: true, sentTo: chatIds.length });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === "/api/storage") return handleStorage(request, env);
     if (url.pathname === "/api/areas") return handleAreas(request, env);
     if (url.pathname === "/api/anthropic") return handleAnthropic(request, env);
+    if (url.pathname === "/api/notify") return handleNotify(request, env);
     return env.ASSETS.fetch(request);
   },
 };
