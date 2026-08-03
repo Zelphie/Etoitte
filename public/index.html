@@ -1456,6 +1456,12 @@ If you can't find enough genuine real matches, return fewer items rather than in
       await safeDelete('votes:'+round.id+':a', true);
       await safeDelete('votes:'+round.id+':b', true);
       await safeDelete('current_round', true);
+      // Otherwise the other person can be left swiping into a round that's already gone with
+      // no signal at all — vote() doesn't re-check the server per card, so their deck just goes
+      // stale until something forces a re-sync. Only the other person needs telling; the one who
+      // just clicked "Clear" already knows.
+      const otherKey = me==='a' ? 'b' : 'a';
+      notify(otherKey, `${names[me]} cleared the round on Etoitte.`);
     }
     myVotes = {};
     deckIndex = 0;
