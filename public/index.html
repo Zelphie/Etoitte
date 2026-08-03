@@ -252,7 +252,10 @@
     <div class="field">
       <input type="text" id="newNotes" placeholder="Notes (optional — 'get the katsu')">
     </div>
-    <button class="toolbar-btn" id="btnAddSpot" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--yes);color:var(--paper);font-weight:600;cursor:pointer;">Add to the list</button>
+    <div class="field row">
+      <button class="toolbar-btn" id="btnAddSpot" style="padding:10px;border-radius:8px;border:none;background:var(--yes);color:var(--paper);font-weight:600;cursor:pointer;">Add to the list</button>
+      <button id="btnCancelEdit" class="hidden" style="padding:10px;border-radius:8px;border:1px solid rgba(239,227,200,0.25);background:transparent;color:var(--paper);font-weight:600;cursor:pointer;">Cancel</button>
+    </div>
     <div id="spotList" style="margin-top:14px;"></div>
   </div>
 
@@ -591,6 +594,7 @@
     return Object.keys(AREA_LABELS).filter(key => key !== 'walkable' && !grouped.has(key));
   }
   let newSpotAreas = []; // areas picked (chip multi-select) for the spot currently being added
+  let editingId = null; // id of the restaurant currently being edited via the add-spot form, or null when adding new
   let deckIndex = 0;
   let pollTimer = null;
 
@@ -910,14 +914,22 @@
       const notesLine = r.notes ? `<br><span class="notes">${escapeHtml(r.notes)}</span>` : '';
       const mapsLine = restaurantMapsUrl(r) ? `<br>${mapsLinkHtml(r, 'color:var(--muted);')}` : '';
       row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span>${notesLine}${mapsLine}</div>`;
+      const actions = document.createElement('div');
+      const edit = document.createElement('button');
+      edit.textContent = 'Edit';
+      edit.style.color = 'var(--butter)';
+      edit.onclick = ()=> enterEditMode(r);
       const del = document.createElement('button');
       del.textContent = 'Remove';
       del.onclick = async ()=>{
         restaurants = restaurants.filter(x=>x.id!==r.id);
         await safeSet('restaurants', restaurants, true);
+        if(editingId===r.id) exitEditMode();
         renderManagePanel();
       };
-      row.appendChild(del);
+      actions.appendChild(edit);
+      actions.appendChild(del);
+      row.appendChild(actions);
       list.appendChild(row);
     });
   }
@@ -1075,6 +1087,42 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
   }
   document.getElementById('btnAutofill').onclick = lookupMapsLink;
 
+  // Editing reuses the same add-spot form rather than a second UI — entering edit mode just
+  // pre-fills it from the existing restaurant and relabels the submit button. Saving updates
+  // that restaurant's fields in place (same id), so anything already referencing it — an
+  // in-progress round's deck, recorded votes — keeps working rather than pointing at a spot
+  // that no longer exists.
+  function resetSpotForm(){
+    document.getElementById('newName').value='';
+    document.getElementById('newCuisine').value='';
+    document.getElementById('newNotes').value='';
+    document.getElementById('mapsLink').value='';
+    document.getElementById('autofillStatus').textContent='';
+    newSpotAreas = [];
+  }
+  function enterEditMode(r){
+    editingId = r.id;
+    document.getElementById('newName').value = r.name;
+    document.getElementById('newCuisine').value = r.cuisine || '';
+    document.getElementById('newPrice').value = String(r.price);
+    document.getElementById('newNotes').value = r.notes || '';
+    document.getElementById('mapsLink').value = r.mapsLink || '';
+    document.getElementById('autofillStatus').textContent = '';
+    newSpotAreas = [...r.areas];
+    renderNewAreaChips();
+    document.getElementById('btnAddSpot').textContent = 'Save changes';
+    document.getElementById('btnCancelEdit').classList.remove('hidden');
+    document.getElementById('mapsLink').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+  function exitEditMode(){
+    editingId = null;
+    resetSpotForm();
+    renderNewAreaChips();
+    document.getElementById('btnAddSpot').textContent = 'Add to the list';
+    document.getElementById('btnCancelEdit').classList.add('hidden');
+  }
+  document.getElementById('btnCancelEdit').onclick = exitEditMode;
+
   document.getElementById('btnAddSpot').onclick = async ()=>{
     const name = document.getElementById('newName').value.trim();
     if(!name) return;
@@ -1083,14 +1131,14 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
     const areas = [...newSpotAreas];
     const mapsLink = safeHttpUrl(document.getElementById('mapsLink').value.trim()) || '';
     const notes = document.getElementById('newNotes').value.trim();
-    restaurants.push({id: uid(), name, cuisine, price, areas, mapsLink, notes});
+    if(editingId){
+      const existing = restaurants.find(x=>x.id===editingId);
+      if(existing) Object.assign(existing, {name, cuisine, price, areas, mapsLink, notes});
+    } else {
+      restaurants.push({id: uid(), name, cuisine, price, areas, mapsLink, notes});
+    }
     await safeSet('restaurants', restaurants, true);
-    document.getElementById('newName').value='';
-    document.getElementById('newCuisine').value='';
-    document.getElementById('newNotes').value='';
-    document.getElementById('mapsLink').value='';
-    document.getElementById('autofillStatus').textContent='';
-    newSpotAreas = [];
+    exitEditMode(); // no-op on editingId if we were already adding new — just clears the form
     renderManagePanel();
   };
 
