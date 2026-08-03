@@ -120,7 +120,11 @@
   .card .tags span{
     font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 9px;border-radius:6px;background:rgba(0,0,0,0.06);color:var(--text);
   }
-  .card .notes{
+  /* Shared across the swipe card, manage list, and match results — not scoped to .card, since
+     it's now the same conditional "show notes if present" treatment in all three read views.
+     margin-top:auto only does anything inside the card's flex column (pushes it to the bottom);
+     it's a harmless no-op in the other two, which aren't flex containers. */
+  .notes{
     font-size:13px;font-style:italic;color:#4a4636;line-height:1.5;margin-top:auto;
     overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-overflow:ellipsis;
   }
@@ -244,9 +248,6 @@
     <div class="field">
       <label>Areas (tap any that apply)</label>
       <div id="newAreaChips"></div>
-    </div>
-    <div class="field">
-      <input type="text" id="newAddress" placeholder="Exact address (optional, for future features)">
     </div>
     <div class="field">
       <input type="text" id="newNotes" placeholder="Notes (optional — 'get the katsu')">
@@ -619,7 +620,7 @@
     applyPalette();
     renderPaletteRow();
     restaurants = (await safeGet('restaurants', true)) || [];
-    let areasMigrated = false;
+    let restaurantsMigrated = false;
     restaurants.forEach(r=>{
       const hadLegacyField = ('distance' in r);
       const migratedAreas = migrateAreaKeys(r.areas !== undefined ? r.areas : r.distance);
@@ -627,9 +628,13 @@
         migratedAreas.length !== r.areas.length || migratedAreas.some((a,i)=>a!==r.areas[i]);
       r.areas = migratedAreas;
       if(hadLegacyField) delete r.distance;
-      if(changed) areasMigrated = true;
+      if(changed) restaurantsMigrated = true;
+      // 'address' was dropped from the data model entirely (no display surface left for it,
+      // and the Maps-link fallback that used to read it is gone too) — strip it from anything
+      // saved before this change rather than leaving a dead, unused field sitting in storage.
+      if('address' in r){ delete r.address; restaurantsMigrated = true; }
     });
-    if(areasMigrated) await safeSet('restaurants', restaurants, true);
+    if(restaurantsMigrated) await safeSet('restaurants', restaurants, true);
     round = await safeGet('current_round', true);
     aiAssistEnabled = !!(await safeGet('ai_assist_enabled', true));
     renderAiToggle();
@@ -902,9 +907,9 @@
       row.className = 'list-item';
       const priceStr = '$'.repeat(r.price);
       const distStr = areaLabelsText(r.areas);
-      const addressLine = r.address ? `<br><span class="meta">${escapeHtml(r.address)}</span>` : '';
+      const notesLine = r.notes ? `<br><span class="notes">${escapeHtml(r.notes)}</span>` : '';
       const mapsLine = restaurantMapsUrl(r) ? `<br>${mapsLinkHtml(r, 'color:var(--muted);')}` : '';
-      row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span>${addressLine}${mapsLine}</div>`;
+      row.innerHTML = `<div><strong>${escapeHtml(r.name)}</strong><br><span class="meta">${escapeHtml(r.cuisine||'—')} · ${priceStr} · ${distStr}</span>${notesLine}${mapsLine}</div>`;
       const del = document.createElement('button');
       del.textContent = 'Remove';
       del.onclick = async ()=>{
@@ -934,14 +939,10 @@
     }catch(e){}
     return null;
   }
-  // Prefers the saved Maps link; falls back to a Maps search built from name+address
-  // (covers AI-suggested wildcards, which never have a pasted link of their own).
+  // Pasted-only — no generated name/address-search fallback. AI-suggested wildcards never have
+  // a pasted link of their own, so they simply show no "View on Maps" link at all.
   function restaurantMapsUrl(r){
-    const direct = safeHttpUrl(r.mapsLink);
-    if(direct) return direct;
-    const queryParts = [r.name, r.address].filter(Boolean);
-    if(!queryParts.length) return null;
-    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(queryParts.join(', ') + ', Singapore');
+    return safeHttpUrl(r.mapsLink);
   }
   function mapsLinkHtml(r, extraStyle){
     const url = restaurantMapsUrl(r);
@@ -1032,11 +1033,10 @@ Link: ${url}
 ${hints.nameGuess ? 'Text found in the link suggests the name may be: "' + hints.nameGuess + '".' : ''}
 
 Respond with ONLY a JSON object, no markdown fences, no extra commentary, in exactly this shape:
-{"name": "...", "cuisine": "...", "price": 1, "address": "...", "notes": "..."}
+{"name": "...", "cuisine": "...", "price": 1, "notes": "..."}
 
 - "price" must be an integer 1, 2, or 3 (1=$, 2=$$, 3=$$$) — your best estimate of the price level.
 - "cuisine" should be a short label (e.g. "Ramen", "Italian", "Cafe").
-- "address" should be the full street address in Singapore, if you can find it.
 - "notes" should be one short line, under 12 words (e.g. a signature dish or the general vibe).
 If you cannot identify the place at all, respond with exactly {"error": "not found"}.`;
 
@@ -1063,7 +1063,6 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
         document.getElementById('newName').value = parsed.name || hints.nameGuess || '';
         document.getElementById('newCuisine').value = parsed.cuisine || '';
         if(parsed.price >= 1 && parsed.price <= 3) document.getElementById('newPrice').value = String(parsed.price);
-        document.getElementById('newAddress').value = parsed.address || '';
         document.getElementById('newNotes').value = parsed.notes || '';
         statusEl.textContent = 'Filled in below — check it over, then add to the list.';
         if(hints.lat != null && hints.lng != null) suggestArea(hints.lat, hints.lng, statusEl);
@@ -1082,14 +1081,12 @@ If you cannot identify the place at all, respond with exactly {"error": "not fou
     const cuisine = document.getElementById('newCuisine').value.trim();
     const price = parseInt(document.getElementById('newPrice').value,10);
     const areas = [...newSpotAreas];
-    const address = document.getElementById('newAddress').value.trim();
     const mapsLink = safeHttpUrl(document.getElementById('mapsLink').value.trim()) || '';
     const notes = document.getElementById('newNotes').value.trim();
-    restaurants.push({id: uid(), name, cuisine, price, areas, address, mapsLink, notes});
+    restaurants.push({id: uid(), name, cuisine, price, areas, mapsLink, notes});
     await safeSet('restaurants', restaurants, true);
     document.getElementById('newName').value='';
     document.getElementById('newCuisine').value='';
-    document.getElementById('newAddress').value='';
     document.getElementById('newNotes').value='';
     document.getElementById('mapsLink').value='';
     document.getElementById('autofillStatus').textContent='';
@@ -1111,10 +1108,9 @@ ${cuisineText}
 These are "wildcard" picks meant to nudge the user out of their usual defaults — genuinely new-to-them places, not variations of what they already eat.
 
 Respond with ONLY a JSON array, no markdown fences, no extra commentary, in exactly this shape:
-[{"name":"...", "cuisine":"...", "price":1, "lat":1.30, "lng":103.80, "address":"...", "notes":"..."}]
+[{"name":"...", "cuisine":"...", "price":1, "lat":1.30, "lng":103.80, "notes":"..."}]
 - "price": integer 1-3 matching the scale above.
 - "lat"/"lng": approximate decimal-degree coordinates of the restaurant, so we can tell which part of Singapore it's in.
-- "address": the full street address in Singapore, if known.
 - "notes": one short line, under 12 words.
 If you can't find enough genuine real matches, return fewer items rather than inventing fictitious ones.`;
 
@@ -1148,7 +1144,6 @@ If you can't find enough genuine real matches, return fewer items rather than in
           cuisine: x.cuisine || '',
           price: (x.price >= 1 && x.price <= 3) ? x.price : filters.budget,
           areas: [area],
-          address: x.address || '',
           notes: x.notes || '',
           external: true
         };
@@ -1339,7 +1334,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
     if(r.external){
       document.getElementById('btnSaveExternal').onclick = async (e)=>{
         e.stopPropagation();
-        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, areas: r.areas, address: r.address || '', mapsLink: r.mapsLink || '', notes: r.notes});
+        restaurants.push({id: uid(), name: r.name, cuisine: r.cuisine, price: r.price, areas: r.areas, mapsLink: r.mapsLink || '', notes: r.notes});
         await safeSet('restaurants', restaurants, true);
         const b = document.getElementById('btnSaveExternal');
         b.textContent = 'Saved ✓'; b.disabled = true;
@@ -1427,6 +1422,7 @@ If you can't find enough genuine real matches, return fewer items rather than in
         <h3>${escapeHtml(r.name)}</h3>
         <div class="tags"><span>${escapeHtml(r.cuisine||'—')}</span><span>${'$'.repeat(r.price)}</span><span>${areaLabelsText(r.areas)}</span></div>
         ${mapsLinkHtml(r, 'color:var(--text);display:inline-block;margin-top:6px;')}
+        ${r.notes ? '<div class="notes" style="margin-top:6px;">'+escapeHtml(r.notes)+'</div>' : ''}
       </div>`;
     });
     if(matchIds.length>1){
