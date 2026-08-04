@@ -162,12 +162,19 @@ async function handleNotify(request, env) {
     }
   }
 
+  // Every notification gets an "Open Etoitte" button so tapping it jumps straight into the
+  // app instead of the recipient having to go find the URL themselves. Derived from the
+  // incoming request's own origin rather than hardcoded, so this keeps working automatically
+  // if the app ever moves to a different *.workers.dev subdomain or a custom domain.
+  const appUrl = new URL(request.url).origin;
+  const replyMarkup = { inline_keyboard: [[{ text: "Open Etoitte", url: appUrl }]] };
+
   await Promise.all(
     chatIds.map((chatId) =>
       fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text }),
+        body: JSON.stringify({ chat_id: chatId, text, reply_markup: replyMarkup }),
       }).catch((e) => {
         /* best-effort — a failed Telegram send shouldn't surface as an app error */
       })

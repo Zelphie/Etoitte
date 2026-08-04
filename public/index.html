@@ -1565,13 +1565,15 @@ If you can't find enough genuine real matches, return fewer items rather than in
   // Fires exactly once per round (guarded by a KV flag, since this can be reached both by
   // whoever just finished swiping last AND by the other side's poll catching up to the same
   // "both done" state within moments of each other) — whichever of the two gets there first
-  // sends the notification, the other sees the flag already set and skips it.
-  async function notifyRoundCompleteOnce(){
+  // sends the notification, the other sees the flag already set and skips it. Takes the text
+  // rather than hardcoding it, since what actually happened (no overlap / one match / several)
+  // is only known by the caller.
+  async function notifyRoundCompleteOnce(text){
     const key = 'notified_complete:' + round.id;
     const already = await safeGet(key, true);
     if(already) return;
     await safeSet(key, true, true);
-    notify('both', 'Results are in on Etoitte! 🎉');
+    notify('both', text);
   }
 
   async function renderWaitingOrMatches(){
@@ -1591,15 +1593,23 @@ If you can't find enough genuine real matches, return fewer items rather than in
       return;
     }
     if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
-    await notifyRoundCompleteOnce();
     const matchIds = round.deck.filter(id => myVotes[id]===true && otherVotes[id]===true);
     const uniqueMatches = [...new Set(matchIds)];
     if(uniqueMatches.length===0){
+      await notifyRoundCompleteOnce('No overlap this round on Etoitte 😅 — try shuffling again?');
       mainArea.innerHTML = `<div class="status-block"><p>No overlap this round 😅</p><div class="sub">Try widening a filter, or just shuffle again — the wildcard might land better next time.</div></div>${clearRoundControlHtml()}`;
       wireClearRoundControl();
       return;
     }
     const pickId = uniqueMatches[Math.floor(Math.random()*uniqueMatches.length)];
+    // Naming a specific pick in the notification is only accurate when there's exactly one
+    // match — with several, the on-screen pick is a random draw from renderMatches() that can
+    // change on reroll or on a later re-render, so naming one here could say something the
+    // recipient's own screen then contradicts. Report the count instead in that case.
+    const resultText = uniqueMatches.length===1
+      ? `Results are in on Etoitte! Tonight's pick: ${getCardData(pickId)?.name || 'your match'} 🎉` // plain-text Telegram message, not HTML — no escapeHtml here
+      : `Results are in on Etoitte! ${uniqueMatches.length} spots matched — open the app to see (and maybe reroll) 🎉`;
+    await notifyRoundCompleteOnce(resultText);
     renderMatches(uniqueMatches, pickId);
   }
 
